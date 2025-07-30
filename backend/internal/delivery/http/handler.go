@@ -2,34 +2,72 @@ package http
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/kust1q/Zapp/backend/internal/service"
+	"github.com/kust1q/Zapp/backend/internal/domain/entity"
 )
 
-type Handler struct {
-	services *service.Service
+type AuthService interface {
+	CreateUser(entity.User) (int, error)
 }
 
-func NewHandler(services *service.Service) *Handler {
-	return &Handler{services: services}
+type TweetService interface {
+}
+
+type UserService interface {
+}
+
+type SearchService interface {
+}
+
+type FeedService interface {
+}
+
+type MediaService interface {
+}
+
+type Handler struct {
+	authService   AuthService
+	tweetService  TweetService
+	userService   UserService
+	searchService SearchService
+	feedService   FeedService
+	mediaService  MediaService
+}
+
+func NewHandler(
+	authService AuthService,
+	tweetService TweetService,
+	userService UserService,
+	searchService SearchService,
+	feedService FeedService,
+	mediaService MediaService,
+) *Handler {
+	return &Handler{
+		authService:   authService,
+		tweetService:  tweetService,
+		userService:   userService,
+		searchService: searchService,
+		feedService:   feedService,
+		mediaService:  mediaService,
+	}
 }
 
 func (h *Handler) InitRouters() *gin.Engine {
 	router := gin.New()
 
+	auth := router.Group("/auth")
+	{
+		auth.POST("/sigh-up", h.signUp)
+		auth.POST("/sigh-in", h.signIn)
+		auth.POST("/sigh-out", h.signOut)
+		auth.POST("/request-verify-token", h.reqVerify)
+		auth.POST("/verify", h.verify)
+		auth.POST("/forgot-password", h.forgotPasswod)
+		auth.POST("/reset-password", h.resetPassword)
+	}
+
 	api := router.Group("/api")
 
 	{
-		auth := api.Group("/auth")
-		{
-			auth.POST("/sigh-up", h.signUp)
-			auth.POST("/sigh-in", h.signIn)
-			auth.POST("/sigh-out", h.signOut)
-			auth.POST("/request-verify-token", h.reqVerify)
-			auth.POST("/verify", h.verify)
-			auth.POST("/forgot-password", h.forgotPasswod)
-			auth.POST("/reset-password", h.resetPassword)
-		}
-
 		tweet := api.Group("/tweet")
 		{
 			tweet.POST("/", h.postTweet)
@@ -49,6 +87,12 @@ func (h *Handler) InitRouters() *gin.Engine {
 				retweet.POST("/", h.postRetweet)
 				retweet.DELETE("/", h.deleteRetweet)
 			}
+
+			media := tweet.Group("/media")
+			{
+				media.POST("/upload", h.upMedia)
+				media.DELETE("/:id", h.delMedia)
+			}
 		}
 
 		user := api.Group("/user")
@@ -56,11 +100,9 @@ func (h *Handler) InitRouters() *gin.Engine {
 			user.GET("/me", h.getMe)
 			user.PUT("/me", h.putMe)
 			user.GET("/:username", h.getByUsername)
-			user.POST("/avatar", h.postAvatar)
 			user.GET("/:username/followers", h.followers)
 			user.GET("/:username/following", h.following)
 			user.DELETE("/me", h.delMe)
-			user.DELETE("/avatar", h.delAvatar)
 
 			follow := user.Group("/:username/follow")
 			{
@@ -74,12 +116,6 @@ func (h *Handler) InitRouters() *gin.Engine {
 			feed.GET("/", h.getFeed)
 			feed.GET("/explore", h.expFeed)
 			feed.GET("/trends", h.trendsFeed)
-		}
-
-		media := api.Group("/media")
-		{
-			media.POST("/upload", h.upMedia)
-			media.DELETE("/:id", h.delMedia)
 		}
 
 		search := api.Group("/search")

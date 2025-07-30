@@ -1,8 +1,18 @@
 package http
 
-import "github.com/gin-gonic/gin"
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/kust1q/Zapp/backend/internal/dto"
+)
 
 func (h *Handler) signUp(c *gin.Context) {
+	var in dto.CreateUserRequest
+	if err := c.BindJSON(&in); err != nil {
+		newErrorReponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
 
 }
 
