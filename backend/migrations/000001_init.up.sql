@@ -5,7 +5,8 @@ CREATE TABLE users (
     password_hash TEXT NOT NULL,
     bio VARCHAR(100) DEFAULT '',
     avatar_url VARCHAR(255),
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    is_superuser BOOLEAN DEFAULT FALSE NOT NULL
 );
 
 CREATE TABLE tweets (
