@@ -1,12 +1,15 @@
 package http
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
-	"github.com/kust1q/Zapp/backend/internal/domain/entity"
+	"github.com/kust1q/Zapp/backend/internal/dto"
 )
 
 type AuthService interface {
-	CreateUser(entity.User) (int, error)
+	SignUp(ctx context.Context, user dto.CreateUserRequest) (dto.UserResponse, error)
+	SignIn(ctx context.Context, credential dto.SignInRequest) (dto.SignInResponse, error)
 }
 
 type TweetService interface {
@@ -58,6 +61,7 @@ func (h *Handler) InitRouters() *gin.Engine {
 	{
 		auth.POST("/sigh-up", h.signUp)
 		auth.POST("/sigh-in", h.signIn)
+		auth.POST("/refresh", h.refresh)
 		auth.POST("/sigh-out", h.signOut)
 		auth.POST("/request-verify-token", h.reqVerify)
 		auth.POST("/verify", h.verify)
