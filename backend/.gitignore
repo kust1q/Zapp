@@ -32,3 +32,5 @@ go.work.sum
 .vscode/
 pgdata/
 minio_data/
+redis_data/
+certs/
