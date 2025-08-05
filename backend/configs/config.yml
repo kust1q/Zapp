@@ -16,3 +16,19 @@ minio:
   password: ${MINIO_PASSWORD}
   sslmode: false
   bucketname: "images"
+
+redis:
+  host: "localhost"
+  port: 6379
+  password: ${REDIS_PASSWORD}
+  db: 0
+  
+cache:
+  secret: ${HASH_SECRET}
+  ttl: 24h
+
+jwt:
+  accessTTL: 15m
+  refreshTTL: 720h
+  private: ${PRIVATE_KEY_PATH}
+  public: ${PUBLIC_KEY_PATH}

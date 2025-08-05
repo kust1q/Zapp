@@ -1,10 +1,10 @@
 package config
 
 type MinioConfig struct {
-	Port          string
-	MinioEndpoint string
-	BucketName    string
-	MinioUser     string
-	MinioPassword string
-	MinioUseSSL   bool
+	Port       string
+	Endpoint   string
+	BucketName string
+	User       string
+	Password   string
+	UseSSL     bool
 }
