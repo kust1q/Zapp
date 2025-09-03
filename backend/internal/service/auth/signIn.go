@@ -21,14 +21,18 @@ var (
 )
 
 type AccessClaims struct {
-	UserID string `json:"user_id"`
+	UserID int    `json:"user_id"`
 	Email  string `json:"email"`
 	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
-func (s *authService) SignIn(ctx context.Context, credential dto.SignInRequest) (dto.SignInResponse, error) {
-	credential.Email = strings.ToLower(credential.Email)
+func (s *authService) SignIn(ctx context.Context, credential *dto.SignInRequest) (dto.SignInResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	credential.Email = strings.ToLower(strings.TrimSpace(credential.Email))
+	credential.Password = strings.TrimSpace(credential.Password)
 
 	user, err := s.storage.GetUserByEmail(ctx, credential.Email)
 	if err != nil {
@@ -47,7 +51,7 @@ func (s *authService) SignIn(ctx context.Context, credential dto.SignInRequest) 
 		role = "admin"
 	}
 
-	accessToken, err := s.generateAccessToken(strconv.Itoa(user.ID), user.Email, role)
+	accessToken, err := s.generateAccessToken(user.ID, user.Email, role)
 	if err != nil {
 		return dto.SignInResponse{}, fmt.Errorf("failed to generate access token: %w", err)
 	}
@@ -63,7 +67,7 @@ func (s *authService) SignIn(ctx context.Context, credential dto.SignInRequest) 
 	}, nil
 }
 
-func (s *authService) generateAccessToken(userID, email, role string) (string, error) {
+func (s *authService) generateAccessToken(userID int, email, role string) (string, error) {
 	claims := AccessClaims{
 		UserID: userID,
 		Email:  email,
@@ -83,7 +87,7 @@ func (s *authService) generateRefreshToken(ctx context.Context, userID string) (
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return "", fmt.Errorf("failed to generate token: %w", err)
 	}
-	refreshToken := base64.URLEncoding.EncodeToString(tokenBytes)
+	refreshToken := base64.RawURLEncoding.EncodeToString(tokenBytes)
 	if err := s.tokens.Store(ctx, refreshToken, userID, s.cfg.RefreshTTL); err != nil {
 		return "", fmt.Errorf("failed to store refresh token: %w", err)
 	}
@@ -91,32 +95,28 @@ func (s *authService) generateRefreshToken(ctx context.Context, userID string) (
 	return refreshToken, nil
 }
 
-/*
-func (s *authService) VerifyAccessToken(tokenString string) (*AccessClaims, error) {
-    claims := &AccessClaims{}
+func (s *authService) VerifyAccessToken(tokenString string) (int, error) {
+	claims := &AccessClaims{}
 
-    token, err := jwt.ParseWithClaims(
-        tokenString,
-        claims,
-        func(token *jwt.Token) (interface{}, error) {
-            // Проверка алгоритма
-            if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
-                return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-            }
-            return s.publicKey, nil
-        },
-        jwt.WithLeeway(5*time.Second),
-    )
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		claims,
+		func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			}
+			return s.cfg.PublicKey, nil
+		},
+		jwt.WithLeeway(10*time.Second),
+	)
 
-    if err != nil {
-        return nil, fmt.Errorf("token validation failed: %w", err)
-    }
+	if err != nil {
+		return 0, fmt.Errorf("token validation failed: %w", err)
+	}
 
-    if !token.Valid {
-        return nil, errors.New("invalid token")
-    }
+	if !token.Valid {
+		return 0, errors.New("invalid token")
+	}
 
-    return claims, nil
+	return claims.UserID, nil
 }
-
-*/
