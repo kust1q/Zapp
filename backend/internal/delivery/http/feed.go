@@ -6,7 +6,7 @@ func (h *Handler) getFeed(c *gin.Context) {
 
 }
 
-func (h *Handler) expFeed(c *gin.Context) {
+func (h *Handler) exploreFeed(c *gin.Context) {
 
 }
 

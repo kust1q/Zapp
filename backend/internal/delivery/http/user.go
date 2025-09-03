@@ -6,23 +6,15 @@ func (h *Handler) getMe(c *gin.Context) {
 
 }
 
-func (h *Handler) putMe(c *gin.Context) {
+func (h *Handler) updateMe(c *gin.Context) {
 
 }
 
-func (h *Handler) delMe(c *gin.Context) {
+func (h *Handler) deleteMe(c *gin.Context) {
 
 }
 
 func (h *Handler) getByUsername(c *gin.Context) {
-
-}
-
-func (h *Handler) postAvatar(c *gin.Context) {
-
-}
-
-func (h *Handler) delAvatar(c *gin.Context) {
 
 }
 
@@ -34,10 +26,10 @@ func (h *Handler) following(c *gin.Context) {
 
 }
 
-func (h *Handler) postFollow(c *gin.Context) {
+func (h *Handler) followUser(c *gin.Context) {
 
 }
 
-func (h *Handler) delFollow(c *gin.Context) {
+func (h *Handler) unfollowUser(c *gin.Context) {
 
 }
