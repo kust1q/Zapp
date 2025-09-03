@@ -4,26 +4,25 @@ CREATE TABLE users (
     email VARCHAR(64) UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     bio VARCHAR(100) DEFAULT '',
+    gen VARCHAR(10) DEFAULT 'male' NOT NULL,
     avatar_url VARCHAR(255),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    is_superuser BOOLEAN DEFAULT FALSE NOT NULL
+    is_superuser BOOLEAN DEFAULT FALSE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE tweets (
     id SERIAL PRIMARY KEY, 
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,  
     content VARCHAR(280) NOT NULL,
-    parent_tweet_id INT REFERENCES tweets(id) ON DELETE CASCADE,
+    parent_tweet_id INT DEFAULT NULL REFERENCES tweets(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    like_count INT DEFAULT 0,
-    reply_count INT DEFAULT 0,
-    retweet_count INT DEFAULT 0
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE tweet_media (
-    tweet_id INT REFERENCES tweets(id) ON DELETE CASCADE,
+    tweet_id INT PRIMARY KEY REFERENCES tweets(id) ON DELETE CASCADE,
     media_url VARCHAR(255),
-    media_type VARCHAR(10) NOT NULL
+    media_type VARCHAR(15) NOT NULL
 );
 
 CREATE TABLE follows (
@@ -41,8 +40,14 @@ CREATE TABLE likes (
 );
 
 CREATE TABLE retweets (
+    id SERIAL PRIMARY KEY, 
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     tweet_id INT NOT NULL REFERENCES tweets(id) ON DELETE CASCADE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (user_id, tweet_id)
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE secret_questions (
+    user_id INT PRIMARY KEY NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    question VARCHAR(100) NOT NULL,
+    answer VARCHAR(100) NOT NULL
 );
