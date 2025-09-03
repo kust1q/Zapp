@@ -8,12 +8,13 @@ import (
 )
 
 const (
-	UserTable       = "users"
-	FollowsTable    = "follows"
-	LikesTable      = "likes"
-	TweetsTable     = "tweets"
-	RetweetsTable   = "retweets"
-	TweetMediaTable = "tweet_media"
+	UserTable           = "users"
+	FollowsTable        = "follows"
+	LikesTable          = "likes"
+	TweetsTable         = "tweets"
+	RetweetsTable       = "retweets"
+	TweetMediaTable     = "tweet_media"
+	SecretQuestionTable = "secret_questions"
 )
 
 func NewPostgresDB(cfg config.PostgresConfig) (*sqlx.DB, error) {

@@ -10,6 +10,7 @@ import (
 
 const (
 	prefixRefreshToken = "refresh:"
+	prefixUserSessions = "user_sessions:"
 )
 
 type tokenStorage struct {
@@ -23,24 +24,75 @@ func NewTokenStorage(redis *redis.Client) *tokenStorage {
 }
 
 func (s *tokenStorage) Store(ctx context.Context, token, userID string, ttl time.Duration) error {
-	return s.redis.Set(ctx, s.buildKey(token), userID, ttl).Err()
+	s.removeExpiredTokens(context.Background(), userID)
+	_, err := s.redis.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		pipe.SAdd(ctx, s.buildSessionKey(userID), token)
+		pipe.Expire(ctx, s.buildSessionKey(userID), ttl)
+		pipe.Set(ctx, s.buildTokenKey(token), userID, ttl)
+		return nil
+	})
+	return err
 }
 
-func (s *tokenStorage) Exists(ctx context.Context, token, userID string) (bool, error) {
-	exists, err := s.redis.Get(ctx, s.buildKey(token)).Result()
+func (s *tokenStorage) GetUserIdByRefreshToken(ctx context.Context, token string) (string, error) {
+	userID, err := s.redis.Get(ctx, s.buildTokenKey(token)).Result()
 	if err != nil {
 		if err == redis.Nil {
-			return false, nil
+			return "", nil
 		}
-		return false, fmt.Errorf("redis error: %w", err)
+		return "", fmt.Errorf("redis error: %w", err)
 	}
-	return exists == userID, nil
+	return userID, nil
 }
 
-func (s *tokenStorage) Remove(ctx context.Context, token, userID string) error {
-	return s.redis.Del(ctx, s.buildKey(token)).Err()
+func (s *tokenStorage) Remove(ctx context.Context, token string) error {
+	userID, err := s.GetUserIdByRefreshToken(ctx, token)
+	if userID == "" {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	pipe := s.redis.Pipeline()
+	pipe.Del(ctx, s.buildTokenKey(token))
+	pipe.SRem(ctx, s.buildSessionKey(userID), token)
+	_, err = pipe.Exec(ctx)
+	return err
 }
 
-func (s *tokenStorage) buildKey(refreshToken string) string {
+func (s *tokenStorage) CloseAllSessions(ctx context.Context, userID string) error {
+	tokens, err := s.redis.SMembers(ctx, s.buildSessionKey(userID)).Result()
+	if err != nil {
+		return err
+	}
+	pipe := s.redis.Pipeline()
+	for _, token := range tokens {
+		pipe.Del(ctx, s.buildTokenKey(token))
+		pipe.SRem(ctx, s.buildSessionKey(userID), token)
+	}
+	_, err = pipe.Exec(ctx)
+	return err
+}
+
+func (s *tokenStorage) removeExpiredTokens(ctx context.Context, userID string) error {
+	tokens, err := s.redis.SMembers(ctx, s.buildSessionKey(userID)).Result()
+	if err != nil {
+		return err
+	}
+	pipe := s.redis.Pipeline()
+	for _, token := range tokens {
+		if ttl, _ := s.redis.TTL(ctx, s.buildTokenKey(token)).Result(); ttl < 0 {
+			pipe.SRem(ctx, s.buildSessionKey(userID), token)
+		}
+	}
+	_, err = pipe.Exec(ctx)
+	return err
+}
+
+func (s *tokenStorage) buildTokenKey(refreshToken string) string {
 	return prefixRefreshToken + refreshToken
+}
+
+func (s *tokenStorage) buildSessionKey(userID string) string {
+	return prefixUserSessions + userID
 }

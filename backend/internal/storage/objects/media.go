@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -31,6 +32,7 @@ const (
 type MediaTypeConfig struct {
 	MaxSize       int64
 	AllowedMime   []string
+	AllowedExt    []string
 	ForceMimeType string
 }
 
@@ -59,7 +61,8 @@ func (s *mediaStorage) Upload(ctx context.Context, file io.Reader, mediaType Med
 	if !ok {
 		return "", "", fmt.Errorf("unsupported media type: %s", mediaType)
 	}
-	data, err := s.readAndValidate(file, cfg)
+	ext := strings.ToLower(filepath.Ext(filename))
+	data, err := s.readAndValidate(file, ext, cfg)
 	if err != nil {
 		return "", "", err
 	}
@@ -111,7 +114,7 @@ func (s *mediaStorage) Remove(ctx context.Context, objectPath string) error {
 	)
 }
 
-func (s *mediaStorage) readAndValidate(reader io.Reader, cfg MediaTypeConfig) ([]byte, error) {
+func (s *mediaStorage) readAndValidate(reader io.Reader, ext string, cfg MediaTypeConfig) ([]byte, error) {
 	limitedReader := io.LimitReader(reader, cfg.MaxSize+1)
 	data, err := io.ReadAll(limitedReader)
 	if err != nil {
@@ -126,8 +129,24 @@ func (s *mediaStorage) readAndValidate(reader io.Reader, cfg MediaTypeConfig) ([
 	if !s.isAllowedMimeType(detectedType, cfg) {
 		return nil, fmt.Errorf("invalid media type: %s", detectedType)
 	}
+	if !s.isValidExtension(ext, cfg) {
+		return nil, fmt.Errorf("invalid extension: %s", ext)
+	}
 
 	return data, nil
+}
+
+func (s *mediaStorage) isValidExtension(ext string, cfg MediaTypeConfig) bool {
+	if len(cfg.AllowedExt) == 0 {
+		return true
+	}
+
+	for _, allowed := range cfg.AllowedExt {
+		if strings.EqualFold(ext, allowed) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *mediaStorage) isAllowedMimeType(mimeType string, cfg MediaTypeConfig) bool {
