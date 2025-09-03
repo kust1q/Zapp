@@ -10,9 +10,7 @@ type Tweet struct {
 	ParentTweetID int       `db:"parent_tweet_id"`
 	Content       string    `db:"content"`
 	CreatedAt     time.Time `db:"created_at"`
-	ReplyCount    int       `db:"reply_count"`
-	RetweetCount  int       `db:"retweet_count"`
-	LikeCount     int       `db:"like_count"`
+	UpdatedAt     time.Time `db:"updated_at"`
 }
 
 type TweetMedia struct {
@@ -21,12 +19,8 @@ type TweetMedia struct {
 	MediaType string `db:"media_type"`
 }
 
-type Like struct {
-	UserID  int `db:"user_id"`
-	TweetID int `db:"tweet_id"`
-}
-
 type Retweet struct {
+	ID        int       `db:"id"`
 	UserID    int       `db:"user_id"`
 	TweetID   int       `db:"tweet_id"`
 	CreatedAt time.Time `db:"created_at"`
