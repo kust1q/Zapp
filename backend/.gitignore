@@ -30,7 +30,8 @@ go.work.sum
 # Editor/IDE
 # .idea/
 .vscode/
-pgdata/
+pg_data/
 minio_data/
 redis_data/
 certs/
+admin/

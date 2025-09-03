@@ -25,6 +25,7 @@ import (
 func main() {
 	logrus.SetFormatter(new(logrus.JSONFormatter))
 
+	//Configs
 	if err := config.InitConfig(); err != nil {
 		logrus.WithError(err).Fatal("Error initializing config")
 	}
@@ -34,7 +35,7 @@ func main() {
 	if err := cfg.Validate(); err != nil {
 		logrus.WithError(err).Fatal("Invalid configuration")
 	}
-
+	//DBs
 	postgres, err := postgres.NewPostgresDB(cfg.Postgres)
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to initialize database")
@@ -67,48 +68,68 @@ func main() {
 		log.Fatalf("Failed to load RSA keys: %v", err)
 	}
 
-	authService := auth.NewAuthService(
-		auth.AuthServiceConfig{
-			PrivateKey: privateKey,
-			PublicKey:  publicKey,
-			AccessTTL:  cfg.JWT.AccessTTL,
-			RefreshTTL: cfg.JWT.RefreshTTL,
+	//Init storage
+	userCache := cache.NewAuthCache(redis, hasher, cfg.Cache.TTL)
+	userStorage := data.NewUserStorage(postgres, userCache)
+	mediaTypeMap := map[media.MediaType]media.MediaTypeConfig{
+		media.TypeAvatar: {
+			MaxSize:     10 * 1024 * 1024, // 1 MB
+			AllowedMime: []string{"image/jpeg", "image/png"},
+			AllowedExt:  []string{".jpg", ".jpeg", ".png"},
 		},
-		data.NewUserStorage(postgres),
-		cache.NewAuthCache(redis, hasher, cfg.Cache.TTL),
-		media.NewMediaStorage(minio, media.MediaStorageConfig{
-			Endpoint:   cfg.Minio.Endpoint,
-			BucketName: cfg.Minio.BucketName,
-			UseSSL:     cfg.Minio.UseSSL,
+		media.TypeImage: {
+			MaxSize:     10 * 1024 * 1024, // 10MB
+			AllowedMime: []string{"image/jpeg", "image/png", "image/webp"},
+			AllowedExt:  []string{".jpg", ".jpeg", ".png", ".webp"},
 		},
-			map[media.MediaType]media.MediaTypeConfig{
-				media.TypeAvatar: media.MediaTypeConfig{
-					MaxSize:     1 * 1024 * 1024, // 1 MB
-					AllowedMime: []string{"image/jpeg"},
-				},
-				media.TypeImage: {
-					MaxSize:     10 * 1024 * 1024, // 10MB
-					AllowedMime: []string{"image/jpeg", "image/png", "image/webp"},
-				},
-				media.TypeVideo: {
-					MaxSize:     500 * 1024 * 1024, // 500 MB
-					AllowedMime: []string{"video/mp4", "video/quicktime"},
-				},
-				media.TypeGIF: {
-					MaxSize:       10 * 1024 * 1024, // 10MB
-					AllowedMime:   []string{"image/gif"},
-					ForceMimeType: "image/gif",
-				},
-			}),
-		data.NewTokenStorage(redis),
-	)
+		media.TypeVideo: {
+			MaxSize:     500 * 1024 * 1024, // 500 MB
+			AllowedMime: []string{"video/mp4", "video/quicktime", "video/x-m4v"},
+			AllowedExt:  []string{".mp4", ".mov", ".m4v"},
+		},
+		media.TypeGIF: {
+			MaxSize:       10 * 1024 * 1024, // 10MB
+			AllowedMime:   []string{"image/gif"},
+			AllowedExt:    []string{".gif"},
+			ForceMimeType: "image/gif",
+		},
+		media.TypeAudio: {
+			MaxSize: 50 * 1024 * 1024, // 50 MB
+			AllowedMime: []string{
+				"audio/mpeg",
+				"audio/wav",
+				"audio/x-wav",
+				"audio/ogg",
+				"audio/flac",
+				"audio/aac",
+				"audio/x-m4a",
+				"audio/webm",
+			},
+			AllowedExt: []string{".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a", ".webm"},
+		},
+	}
+	mediaStorage := media.NewMediaStorage(minio, media.MediaStorageConfig{Endpoint: cfg.Minio.Endpoint, BucketName: cfg.Minio.BucketName, UseSSL: cfg.Minio.UseSSL}, mediaTypeMap)
 
+	//Init services
+	authService := auth.NewAuthService(
+		auth.AuthServiceConfig{PrivateKey: privateKey, PublicKey: publicKey, AccessTTL: cfg.JWT.AccessTTL, RefreshTTL: cfg.JWT.RefreshTTL},
+		userStorage,
+		userCache,
+		mediaStorage,
+		data.NewTokenStorage(redis))
+
+	//Init handler
 	handler := http.NewHandler(
+		authService,
+		authService,
+		authService,
+		authService,
+		authService,
 		authService,
 	)
 	srv := new(servers.Server)
 	if err := srv.Run(cfg.App.Port, handler.InitRouters()); err != nil {
-		logrus.Fatalf("error occured while running http server: %s", err.Error())
+		logrus.Fatalf("error occurred while running http server: %s", err.Error())
 	}
 }
 
