@@ -7,6 +7,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
+	"github.com/kust1q/Zapp/backend/internal/dto"
 	"github.com/kust1q/Zapp/backend/internal/storage/postgres"
 )
 
@@ -36,19 +37,19 @@ func (s *tweetStorage) CreateTweet(ctx context.Context, tweet *entity.Tweet) (en
 	return *tweet, nil
 }
 
-func (s *tweetStorage) GetTweetByIds(ctx context.Context, tweetID, userID int) (entity.Tweet, error) {
+func (s *tweetStorage) GetTweetById(ctx context.Context, tweetID int) (entity.Tweet, error) {
 	query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1 AND user_id = $2", postgres.TweetsTable)
 	var tweet entity.Tweet
-	err := s.db.GetContext(ctx, &tweet, query, tweetID, userID)
+	err := s.db.GetContext(ctx, &tweet, query, tweetID)
 	return tweet, err
 }
 
-func (s *tweetStorage) UpdateTweet(ctx context.Context, userID int, tweet *entity.Tweet) (entity.Tweet, error) {
-	query := fmt.Sprintf("UPDATE %s SET content = $1, updated_at = $2 WHERE id = $3 AND user_id = $4 RETURNING content, updated_at", postgres.TweetsTable)
+func (s *tweetStorage) UpdateTweet(ctx context.Context, tweet *entity.Tweet) (entity.Tweet, error) {
+	query := fmt.Sprintf("UPDATE %s SET content = $1, updated_at = $2 WHERE id = $3 RETURNING content, updated_at", postgres.TweetsTable)
 
 	var content string
 	var updatedAt time.Time
-	err := s.db.QueryRowContext(ctx, query, tweet.Content, tweet.UpdatedAt, tweet.ID, userID).Scan(&content, &updatedAt)
+	err := s.db.QueryRowContext(ctx, query, tweet.Content, tweet.UpdatedAt, tweet.ID).Scan(&content, &updatedAt)
 	if err != nil {
 		return entity.Tweet{}, err
 	}
@@ -132,25 +133,29 @@ func (s *tweetStorage) DeleteRetweet(ctx context.Context, userID, retweetID int)
 	return nil
 }
 
-func (s *tweetStorage) GetLikeCount(ctx context.Context, tweetID int) (int, error) {
-	query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE tweet_id = $1", postgres.LikesTable)
-	var count int
-	err := s.db.QueryRowContext(ctx, query, tweetID).Scan(&count)
-	return count, err
+func (s *tweetStorage) GetRepliesToParentTweet(ctx context.Context, parentTweetID int) ([]entity.Tweet, error) {
+	query := fmt.Sprintf("SELECT id, user_id, parent_tweet_id, content, created_at, updated_at FROM %s WHERE parent_tweet_id = $1 ORDER BY created_at DES", postgres.TweetsTable)
+	var tweets []entity.Tweet
+	if err := s.db.SelectContext(ctx, &tweets, query, parentTweetID); err != nil {
+		return nil, err
+	}
+	return tweets, nil
 }
 
-func (s *tweetStorage) GetRetweetCount(ctx context.Context, tweetID int) (int, error) {
-	query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE tweet_id = $1", postgres.RetweetsTable)
-	var count int
-	err := s.db.QueryRowContext(ctx, query, tweetID).Scan(&count)
-	return count, err
-}
+func (s *tweetStorage) GetTweetsByUsername(ctx context.Context, username string) ([]entity.Tweet, error) {
+	query := fmt.Sprintf(`
+        SELECT t.id, t.user_id, t.parent_tweet_id, t.content, t.created_at, t.updated_at 
+        FROM %s t 
+        JOIN %s u ON t.user_id = u.id 
+        WHERE u.username = $1 
+        ORDER BY t.created_at DESC`,
+		postgres.TweetsTable, postgres.UserTable)
 
-func (s *tweetStorage) GetReplyCount(ctx context.Context, tweetID int) (int, error) {
-	query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE parent_tweet_id = $1", postgres.TweetsTable)
-	var count int
-	err := s.db.QueryRowContext(ctx, query, tweetID).Scan(&count)
-	return count, err
+	var tweets []entity.Tweet
+	if err := s.db.SelectContext(ctx, &tweets, query, username); err != nil {
+		return nil, fmt.Errorf("failed to get tweets by username: %w", err)
+	}
+	return tweets, nil
 }
 
 func (s *tweetStorage) GetCounts(ctx context.Context, tweetID int) (likes, retweets, replies int, err error) {
@@ -163,4 +168,19 @@ func (s *tweetStorage) GetCounts(ctx context.Context, tweetID int) (likes, retwe
 
 	err = s.db.QueryRowContext(ctx, query, tweetID).Scan(&likes, &retweets, &replies)
 	return
+}
+
+func (s *tweetStorage) GetLikes(ctx context.Context, tweetID int) ([]dto.UserLikeResponse, error) {
+	query := fmt.Sprintf(`
+        SELECT u.id as user_id, u.username, u.avatar_url
+        FROM %s l
+        JOIN %s u ON l.user_id = u.id
+        WHERE l.tweet_id = $1`,
+		postgres.LikesTable, postgres.UserTable)
+
+	var userLikes []dto.UserLikeResponse
+	if err := s.db.SelectContext(ctx, &userLikes, query, tweetID); err != nil {
+		return nil, fmt.Errorf("failed to get users who liked tweet: %w", err)
+	}
+	return userLikes, nil
 }

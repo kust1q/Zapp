@@ -27,10 +27,33 @@ func (s *tweetService) ReplyToTweet(ctx context.Context, userID, tweetID int, tw
 
 	return dto.TweetResponse{
 		ID:            createdTweet.ID,
-		UserID:        userID,
+		UserID:        createdTweet.UserID,
 		Content:       createdTweet.Content,
 		CreatedAt:     createdTweet.CreatedAt,
 		UpdatedAt:     createdTweet.UpdatedAt,
 		ParentTweetID: &createdTweet.ParentTweetID,
 	}, nil
+}
+
+func (s *tweetService) GetRepliesToTweet(ctx context.Context, tweetID int) ([]dto.TweetResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	replies, err := s.storage.GetRepliesToParentTweet(ctx, tweetID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get replies: %w", err)
+	}
+
+	res := make([]dto.TweetResponse, 0, len(replies))
+	for _, r := range replies {
+		res = append(res, dto.TweetResponse{
+			ID:            r.ID,
+			UserID:        r.UserID,
+			Content:       r.Content,
+			CreatedAt:     r.CreatedAt,
+			UpdatedAt:     r.UpdatedAt,
+			ParentTweetID: &r.ParentTweetID,
+		})
+	}
+	return res, nil
 }

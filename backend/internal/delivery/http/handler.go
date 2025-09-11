@@ -22,12 +22,17 @@ type AuthService interface {
 
 type TweetService interface {
 	CreateTweet(ctx context.Context, userID int, tweet *dto.CreateTweetRequest) (dto.TweetResponse, error)
+	GetTweetById(ctx context.Context, tweetID int) (dto.TweetResponseWithCounters, error)
 	UpdateTweet(ctx context.Context, userID, tweetID int, req *dto.UpdateTweetRequest) (dto.UpdateTweetResponse, error)
-	LikeTweet(ctx context.Context, tweetID int) error
-	UnLikeTweet(ctx context.Context, tweetID int) error
+	LikeTweet(ctx context.Context, userID, tweetID int) error
+	UnlikeTweet(ctx context.Context, userID, tweetID int) error
 	ReplyToTweet(ctx context.Context, userID, tweetID int, tweet *dto.CreateTweetRequest) (dto.TweetResponse, error)
+	GetRepliesToTweet(ctx context.Context, tweetID int) ([]dto.TweetResponse, error)
 	CreateRetweet(ctx context.Context, userID, tweetID int) error
 	DeleteRetweet(ctx context.Context, userID, retweetID int) error
+	GetTweetsByUsername(ctx context.Context, username string) ([]dto.TweetResponse, error)
+	GetLikes(ctx context.Context, tweetID int) ([]dto.UserLikeResponse, error)
+	DeleteTweet(ctx context.Context, userID, tweetID int) error
 }
 
 type UserService interface {
@@ -114,7 +119,6 @@ func (h *Handler) InitRouters() *gin.Engine {
 			tweets.DELETE("/:id/like", h.unlikeTweet)
 
 			tweets.POST("/:id/reply", h.replyToTweet)
-			tweets.GET("/:id/replies", h.getRepliesToTweet)
 
 			tweets.POST("/:id/retweet", h.retweet)
 			tweets.DELETE("/retweets/:id", h.deleteRetweet)
@@ -134,7 +138,6 @@ func (h *Handler) InitRouters() *gin.Engine {
 			users.DELETE("/me", h.deleteMe)
 			users.POST("/:username/follow", h.followUser)
 			users.DELETE("/:username/follow", h.unfollowUser)
-			users.GET("/replies", h.mineReplies)
 		}
 
 		feed := protected.Group("/feed")

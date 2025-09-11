@@ -1,6 +1,8 @@
 package dto
 
-import "time"
+import (
+	"time"
+)
 
 type CreateTweetRequest struct {
 	Content string `json:"content" binding:"required,min=1,max=280"`
@@ -13,9 +15,13 @@ type TweetResponse struct {
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 	ParentTweetID *int      `json:"parent_tweet_id,omitempty"`
-	ReplyCount    int       `json:"reply_count"`
-	RetweetCount  int       `json:"retweet_count"`
-	LikeCount     int       `json:"like_count"`
+}
+
+type TweetResponseWithCounters struct {
+	TweetResponse
+	ReplyCount   int `json:"reply_count"`
+	RetweetCount int `json:"retweet_count"`
+	LikeCount    int `json:"like_count"`
 }
 
 type UpdateTweetRequest struct {
@@ -27,4 +33,10 @@ type UpdateTweetResponse struct {
 	UserID    int       `json:"user_id"`
 	Content   string    `json:"content"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type UserLikeResponse struct {
+	UserID    int    `json:"user_id"`
+	Username  string `json:"username"`
+	AvatarURL string `json:"avatar_url"`
 }

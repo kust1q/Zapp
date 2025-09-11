@@ -10,11 +10,6 @@ import (
 	"github.com/kust1q/Zapp/backend/internal/dto"
 )
 
-var (
-	ErrTweetNotFound      = errors.New("tweet not found")
-	ErrUnauthorizedUpdate = errors.New("user is not authorized to update this tweet")
-)
-
 func (s *tweetService) UpdateTweet(ctx context.Context, userID, tweetID int, req *dto.UpdateTweetRequest) (dto.UpdateTweetResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
