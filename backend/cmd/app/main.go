@@ -12,11 +12,12 @@ import (
 	"github.com/kust1q/Zapp/backend/internal/security"
 	"github.com/kust1q/Zapp/backend/internal/servers"
 	"github.com/kust1q/Zapp/backend/internal/service/auth"
+	"github.com/kust1q/Zapp/backend/internal/service/media"
 	"github.com/kust1q/Zapp/backend/internal/service/tweets"
 	"github.com/kust1q/Zapp/backend/internal/storage/cache"
 	"github.com/kust1q/Zapp/backend/internal/storage/data"
 	"github.com/kust1q/Zapp/backend/internal/storage/minio"
-	media "github.com/kust1q/Zapp/backend/internal/storage/objects"
+	"github.com/kust1q/Zapp/backend/internal/storage/objects"
 	"github.com/kust1q/Zapp/backend/internal/storage/postgres"
 	"github.com/kust1q/Zapp/backend/internal/storage/redis"
 	_ "github.com/lib/pq"
@@ -71,31 +72,26 @@ func main() {
 
 	//Init storage
 	userCache := cache.NewAuthCache(redis, hasher, cfg.Cache.TTL)
-	userStorage := data.NewUserStorage(postgres, userCache)
-	mediaTypeMap := map[media.MediaType]media.MediaTypeConfig{
-		media.TypeAvatar: {
-			MaxSize:     10 * 1024 * 1024, // 1 MB
-			AllowedMime: []string{"image/jpeg", "image/png"},
-			AllowedExt:  []string{".jpg", ".jpeg", ".png"},
-		},
-		media.TypeImage: {
-			MaxSize:     10 * 1024 * 1024, // 10MB
+	dataStorage := data.NewDataStorage(postgres, userCache)
+	mediaTypeMap := map[objects.MediaType]objects.MediaTypeConfig{
+		objects.TypeImage: {
+			MaxSize:     16 * 1024 * 1024, // 16MB
 			AllowedMime: []string{"image/jpeg", "image/png", "image/webp"},
-			AllowedExt:  []string{".jpg", ".jpeg", ".png", ".webp"},
+			AllowedExt:  []string{".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"},
 		},
-		media.TypeVideo: {
-			MaxSize:     500 * 1024 * 1024, // 500 MB
+		objects.TypeVideo: {
+			MaxSize:     512 * 1024 * 1024, // 512 MB
 			AllowedMime: []string{"video/mp4", "video/quicktime", "video/x-m4v"},
-			AllowedExt:  []string{".mp4", ".mov", ".m4v"},
+			AllowedExt:  []string{".mp4", ".mov", ".m4v", ".avi", ".wmv", ".flv", ".webm"},
 		},
-		media.TypeGIF: {
-			MaxSize:       10 * 1024 * 1024, // 10MB
+		objects.TypeGIF: {
+			MaxSize:       16 * 1024 * 1024, // 16MB
 			AllowedMime:   []string{"image/gif"},
 			AllowedExt:    []string{".gif"},
 			ForceMimeType: "image/gif",
 		},
-		media.TypeAudio: {
-			MaxSize: 50 * 1024 * 1024, // 50 MB
+		objects.TypeAudio: {
+			MaxSize: 64 * 1024 * 1024, // 64 MB
 			AllowedMime: []string{
 				"audio/mpeg",
 				"audio/wav",
@@ -106,20 +102,19 @@ func main() {
 				"audio/x-m4a",
 				"audio/webm",
 			},
-			AllowedExt: []string{".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a", ".webm"},
+			AllowedExt: []string{".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a"},
 		},
 	}
-	mediaStorage := media.NewMediaStorage(minio, media.MediaStorageConfig{Endpoint: cfg.Minio.Endpoint, BucketName: cfg.Minio.BucketName, UseSSL: cfg.Minio.UseSSL}, mediaTypeMap)
-	tweetStorage := data.NewTweetStorage(postgres)
+	objectStorage := objects.NewObjectStorage(minio, objects.ObjectStorageConfig{Endpoint: cfg.Minio.Endpoint, BucketName: cfg.Minio.BucketName, UseSSL: cfg.Minio.UseSSL}, mediaTypeMap)
 	//Init services
+	mediaService := media.NewMediaService(dataStorage, objectStorage)
 	authService := auth.NewAuthService(
 		auth.AuthServiceConfig{PrivateKey: privateKey, PublicKey: publicKey, AccessTTL: cfg.JWT.AccessTTL, RefreshTTL: cfg.JWT.RefreshTTL},
-		userStorage,
+		dataStorage,
 		userCache,
-		mediaStorage,
+		mediaService,
 		data.NewTokenStorage(redis))
-
-	tweetService := tweets.NewTweetService(tweetStorage)
+	tweetService := tweets.NewTweetService(dataStorage, mediaService)
 
 	//Init handler
 	handler := http.NewHandler(
@@ -128,7 +123,7 @@ func main() {
 		authService,
 		authService,
 		authService,
-		authService,
+		mediaService,
 	)
 	srv := new(servers.Server)
 	if err := srv.Run(cfg.App.Port, handler.InitRouters()); err != nil {

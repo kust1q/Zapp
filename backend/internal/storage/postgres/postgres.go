@@ -15,6 +15,7 @@ const (
 	RetweetsTable       = "retweets"
 	TweetMediaTable     = "tweet_media"
 	SecretQuestionTable = "secret_questions"
+	AvatarsTable        = "avatars"
 )
 
 func NewPostgresDB(cfg config.PostgresConfig) (*sqlx.DB, error) {

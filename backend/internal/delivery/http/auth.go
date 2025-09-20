@@ -46,7 +46,7 @@ func (h *Handler) signUp(c *gin.Context) {
 		"email":   input.Email,
 		"user_id": user.ID,
 	}).Info("user registered")
-	c.JSON(http.StatusCreated, user)
+	c.JSON(http.StatusCreated, *user)
 }
 
 func (h *Handler) signIn(c *gin.Context) {
@@ -74,7 +74,7 @@ func (h *Handler) signIn(c *gin.Context) {
 		})
 		return
 	}
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, *response)
 }
 
 func (h *Handler) refresh(c *gin.Context) {
@@ -109,7 +109,7 @@ func (h *Handler) refresh(c *gin.Context) {
 		"old_refresh": input.Refresh[:10] + "...",
 		"access":      response.Access[:10] + "...",
 	}).Info("token refreshed")
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, *response)
 }
 
 func (h *Handler) signOut(c *gin.Context) {

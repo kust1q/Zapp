@@ -3,10 +3,15 @@ package http
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kust1q/Zapp/backend/internal/dto"
 	"github.com/sirupsen/logrus"
+)
+
+const (
+	maxMemoryForm = 1024 * 1024 * 1024 // 1 GB
 )
 
 func (h *Handler) createTweet(c *gin.Context) {
@@ -19,13 +24,56 @@ func (h *Handler) createTweet(c *gin.Context) {
 	}
 
 	var input dto.CreateTweetRequest
-	if err := c.BindJSON(&input); err != nil {
-		logrus.WithError(err).Error("failed to create tweet - invalid request body")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	var tweet *dto.TweetResponse
+
+	ct := c.ContentType()
+	if strings.HasPrefix(ct, "multipart/form-data") {
+		if err := c.Request.ParseMultipartForm(maxMemoryForm); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse form data"})
+			return
+		}
+		input.Content = c.PostForm("content")
+	} else {
+		if err := c.BindJSON(&input); err != nil {
+			logrus.WithError(err).Error("failed to create tweet - invalid request body")
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+			return
+		}
+	}
+
+	fileHeader, err := c.FormFile("file")
+	if err != nil && err != http.ErrMissingFile {
+		logrus.WithFields(logrus.Fields{
+			"user_id": userID,
+			"error":   err,
+		}).Error("create tweet failed - internal server error")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "internal server error",
+		})
 		return
 	}
 
-	tweet, err := h.tweetService.CreateTweet(c.Request.Context(), userID.(int), &input)
+	if fileHeader == nil && strings.TrimSpace(input.Content) == "" {
+		logrus.WithError(err).Error("failed to create tweet - impossible create empty tweet")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "impossible create empty tweet"})
+		return
+	} else if fileHeader != nil {
+		openedFile, err := fileHeader.Open()
+		if err != nil {
+			logrus.WithError(err).Error("failed to create tweet - open file error")
+			c.JSON(http.StatusBadRequest, gin.H{"error": "open file error"})
+			return
+		}
+		defer openedFile.Close()
+		file := dto.FileData{
+			File:   openedFile,
+			Header: fileHeader,
+		}
+		tweet, err = h.tweetService.CreateTweetWithMedia(c.Request.Context(), userID.(int), &input, &file)
+	} else {
+		tweet, err = h.tweetService.CreateTweet(c.Request.Context(), userID.(int), &input)
+	}
+
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"user_id": userID,
@@ -41,7 +89,7 @@ func (h *Handler) createTweet(c *gin.Context) {
 		"user_id":  userID,
 		"tweet_id": tweet.ID,
 	}).Info("tweet created")
-	c.JSON(http.StatusCreated, tweet)
+	c.JSON(http.StatusCreated, *tweet)
 }
 
 func (h *Handler) updateTweet(c *gin.Context) {
@@ -79,7 +127,7 @@ func (h *Handler) updateTweet(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, *response)
 }
 
 func (h *Handler) likeTweet(c *gin.Context) {
@@ -242,19 +290,63 @@ func (h *Handler) replyToTweet(c *gin.Context) {
 	}
 
 	var input dto.CreateTweetRequest
-	if err := c.BindJSON(&input); err != nil {
-		logrus.WithError(err).Error("failed to reply - invalid request body")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	var tweet *dto.TweetResponse
+
+	ct := c.ContentType()
+	if strings.HasPrefix(ct, "multipart/form-data") {
+		if err := c.Request.ParseMultipartForm(maxMemoryForm); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse form data"})
+			return
+		}
+		input.Content = c.PostForm("content")
+	} else {
+		if err := c.BindJSON(&input); err != nil {
+			logrus.WithError(err).Error("failed to create tweet - invalid request body")
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+			return
+		}
+	}
+
+	fileHeader, err := c.FormFile("file")
+	if err != nil && err != http.ErrMissingFile {
+		logrus.WithFields(logrus.Fields{
+			"user_id":  userID,
+			"tweet_id": tweetID,
+			"error":    err,
+		}).Error("create tweet failed - internal server error")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "internal server error",
+		})
 		return
 	}
 
-	tweet, err := h.tweetService.ReplyToTweet(c.Request.Context(), userID.(int), tweetID, &input)
+	if fileHeader == nil && strings.TrimSpace(input.Content) == "" {
+		logrus.WithError(err).Error("failed to create tweet - impossible create empty tweet")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "impossible create empty tweet"})
+		return
+	} else if fileHeader != nil {
+		openedFile, err := fileHeader.Open()
+		if err != nil {
+			logrus.WithError(err).Error("failed to create tweet - open file error")
+			c.JSON(http.StatusBadRequest, gin.H{"error": "open file error"})
+			return
+		}
+		defer openedFile.Close()
+		file := dto.FileData{
+			File:   openedFile,
+			Header: fileHeader,
+		}
+		tweet, err = h.tweetService.ReplyToTweetWithMedia(c.Request.Context(), userID.(int), tweetID, &input, &file)
+	} else {
+		tweet, err = h.tweetService.ReplyToTweet(c.Request.Context(), userID.(int), tweetID, &input)
+	}
+
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"user_id":  userID,
 			"tweet_id": tweetID,
 			"error":    err,
-		}).Error("failed to reply - internal server error")
+		}).Error("create tweet failed - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
 		})
@@ -263,10 +355,10 @@ func (h *Handler) replyToTweet(c *gin.Context) {
 
 	logrus.WithFields(logrus.Fields{
 		"user_id":  userID,
-		"tweet_id": tweet.ID,
-	}).Info("reply created")
-	c.JSON(http.StatusCreated, tweet)
-
+		"tweet_id": tweetID,
+		"error":    err,
+	}).Info("tweet created")
+	c.JSON(http.StatusCreated, *tweet)
 }
 
 func (h *Handler) getReplies(c *gin.Context) {
@@ -310,10 +402,10 @@ func (h *Handler) getTweetById(c *gin.Context) {
 	}
 
 	logrus.WithField("tweet_id", tweetID).Info("tweet got")
-	c.JSON(http.StatusOK, tweet)
+	c.JSON(http.StatusOK, *tweet)
 }
 
-func (h *Handler) getTweetsByUsername(c *gin.Context) {
+func (h *Handler) getTweetsAndRetweetsByUsername(c *gin.Context) {
 	username := c.Param("username")
 	if username == "" {
 		logrus.Error("failed to get tweet by username - invalid username")
@@ -321,7 +413,7 @@ func (h *Handler) getTweetsByUsername(c *gin.Context) {
 		return
 	}
 
-	tweets, err := h.tweetService.GetTweetsByUsername(c.Request.Context(), username)
+	tweets, err := h.tweetService.GetTweetsAndRetweetsByUsername(c.Request.Context(), username)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"username": username,

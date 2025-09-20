@@ -1,4 +1,4 @@
-package media
+package objects
 
 import (
 	"bytes"
@@ -22,11 +22,10 @@ var (
 type MediaType string
 
 const (
-	TypeAvatar MediaType = "avatar"
-	TypeImage  MediaType = "image"
-	TypeVideo  MediaType = "video"
-	TypeAudio  MediaType = "audio"
-	TypeGIF    MediaType = "gif"
+	TypeImage MediaType = "image"
+	TypeVideo MediaType = "video"
+	TypeAudio MediaType = "audio"
+	TypeGIF   MediaType = "gif"
 )
 
 type MediaTypeConfig struct {
@@ -36,27 +35,27 @@ type MediaTypeConfig struct {
 	ForceMimeType string
 }
 
-type MediaStorageConfig struct {
+type ObjectStorageConfig struct {
 	Endpoint   string
 	BucketName string
 	UseSSL     bool
 }
 
-type mediaStorage struct {
+type objectStorage struct {
 	mc        *minio.Client
-	cfg       MediaStorageConfig
+	cfg       ObjectStorageConfig
 	mediaCfgs map[MediaType]MediaTypeConfig
 }
 
-func NewMediaStorage(mc *minio.Client, cfg MediaStorageConfig, mediaCfgs map[MediaType]MediaTypeConfig) *mediaStorage {
-	return &mediaStorage{
+func NewObjectStorage(mc *minio.Client, cfg ObjectStorageConfig, mediaCfgs map[MediaType]MediaTypeConfig) *objectStorage {
+	return &objectStorage{
 		mc:        mc,
 		cfg:       cfg,
 		mediaCfgs: mediaCfgs,
 	}
 }
 
-func (s *mediaStorage) Upload(ctx context.Context, file io.Reader, mediaType MediaType, filename string) (path string, mimeType string, err error) {
+func (s *objectStorage) Upload(ctx context.Context, file io.Reader, mediaType MediaType, filename string) (path string, mimeType string, err error) {
 	cfg, ok := s.mediaCfgs[mediaType]
 	if !ok {
 		return "", "", fmt.Errorf("unsupported media type: %s", mediaType)
@@ -92,20 +91,21 @@ func (s *mediaStorage) Upload(ctx context.Context, file io.Reader, mediaType Med
 	return path, mimeType, nil
 }
 
-func (s *mediaStorage) GetURL(objectPath string) string {
-	protocol := "http"
-	if s.cfg.UseSSL {
-		protocol = "https"
+/*
+	func (s *objectStorage) GetURL(objectPath string) string {
+		protocol := "http"
+		if s.cfg.UseSSL {
+			protocol = "https"
+		}
+		return fmt.Sprintf("%s://%s/%s/%s",
+			protocol,
+			s.cfg.Endpoint,
+			s.cfg.BucketName,
+			objectPath,
+		)
 	}
-	return fmt.Sprintf("%s://%s/%s/%s",
-		protocol,
-		s.cfg.Endpoint,
-		s.cfg.BucketName,
-		objectPath,
-	)
-}
-
-func (s *mediaStorage) Remove(ctx context.Context, objectPath string) error {
+*/
+func (s *objectStorage) Remove(ctx context.Context, objectPath string) error {
 	return s.mc.RemoveObject(
 		ctx,
 		s.cfg.BucketName,
@@ -114,7 +114,7 @@ func (s *mediaStorage) Remove(ctx context.Context, objectPath string) error {
 	)
 }
 
-func (s *mediaStorage) readAndValidate(reader io.Reader, ext string, cfg MediaTypeConfig) ([]byte, error) {
+func (s *objectStorage) readAndValidate(reader io.Reader, ext string, cfg MediaTypeConfig) ([]byte, error) {
 	limitedReader := io.LimitReader(reader, cfg.MaxSize+1)
 	data, err := io.ReadAll(limitedReader)
 	if err != nil {
@@ -136,7 +136,7 @@ func (s *mediaStorage) readAndValidate(reader io.Reader, ext string, cfg MediaTy
 	return data, nil
 }
 
-func (s *mediaStorage) isValidExtension(ext string, cfg MediaTypeConfig) bool {
+func (s *objectStorage) isValidExtension(ext string, cfg MediaTypeConfig) bool {
 	if len(cfg.AllowedExt) == 0 {
 		return true
 	}
@@ -149,7 +149,7 @@ func (s *mediaStorage) isValidExtension(ext string, cfg MediaTypeConfig) bool {
 	return false
 }
 
-func (s *mediaStorage) isAllowedMimeType(mimeType string, cfg MediaTypeConfig) bool {
+func (s *objectStorage) isAllowedMimeType(mimeType string, cfg MediaTypeConfig) bool {
 	for _, allowed := range cfg.AllowedMime {
 		if mimeType == allowed {
 			return true

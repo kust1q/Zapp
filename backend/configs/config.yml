@@ -32,7 +32,3 @@ jwt:
   refreshTTL: 720h
   private: ${PRIVATE_KEY_PATH}
   public: ${PUBLIC_KEY_PATH}
-
-cookie:
-  secure: false
-  httpOnly: true

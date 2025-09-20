@@ -13,13 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var (
-	ErrTokenNotFound       = errors.New("refresh token not found")
-	ErrInvalidRefreshToken = errors.New("invalid refresh token")
-	ErrUserNotFound        = errors.New("user not found")
-)
-
-func (s *authService) Refresh(ctx context.Context, token *dto.RefreshRequest) (dto.SignInResponse, error) {
+func (s *authService) Refresh(ctx context.Context, token *dto.RefreshRequest) (*dto.SignInResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
@@ -28,9 +22,9 @@ func (s *authService) Refresh(ctx context.Context, token *dto.RefreshRequest) (d
 	userID, err := s.tokens.GetUserIdByRefreshToken(ctx, token.Refresh)
 	if err != nil {
 		if errors.Is(err, ErrTokenNotFound) {
-			return dto.SignInResponse{}, ErrInvalidRefreshToken
+			return &dto.SignInResponse{}, ErrInvalidRefreshToken
 		}
-		return dto.SignInResponse{}, fmt.Errorf("failed to get refresh token: %w", err)
+		return &dto.SignInResponse{}, fmt.Errorf("failed to get refresh token: %w", err)
 	}
 
 	if err := s.tokens.Remove(ctx, token.Refresh); err != nil {
@@ -39,15 +33,15 @@ func (s *authService) Refresh(ctx context.Context, token *dto.RefreshRequest) (d
 
 	userIntID, err := strconv.Atoi(userID)
 	if err != nil {
-		return dto.SignInResponse{}, fmt.Errorf("invalid user ID format: %w", err)
+		return &dto.SignInResponse{}, fmt.Errorf("invalid user ID format: %w", err)
 	}
 
 	user, err := s.storage.GetUserByID(ctx, userIntID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return dto.SignInResponse{}, ErrUserNotFound
+			return &dto.SignInResponse{}, ErrUserNotFound
 		}
-		return dto.SignInResponse{}, fmt.Errorf("failed to get user: %w", err)
+		return &dto.SignInResponse{}, fmt.Errorf("failed to get user: %w", err)
 	}
 
 	role := "user"
@@ -56,15 +50,15 @@ func (s *authService) Refresh(ctx context.Context, token *dto.RefreshRequest) (d
 	}
 	accessToken, err := s.generateAccessToken(user.ID, user.Email, role)
 	if err != nil {
-		return dto.SignInResponse{}, fmt.Errorf("failed to generate access token: %w", err)
+		return &dto.SignInResponse{}, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
 	refreshToken, err := s.generateRefreshToken(ctx, strconv.Itoa(user.ID))
 	if err != nil {
-		return dto.SignInResponse{}, fmt.Errorf("failed to generate refresh token: %w", err)
+		return &dto.SignInResponse{}, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
 
-	return dto.SignInResponse{
+	return &dto.SignInResponse{
 		Access:  accessToken,
 		Refresh: refreshToken,
 	}, nil

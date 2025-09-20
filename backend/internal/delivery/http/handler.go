@@ -2,17 +2,20 @@ package http
 
 import (
 	"context"
+	"database/sql"
+	"io"
 	"net/http"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/kust1q/Zapp/backend/internal/domain/entity"
 	"github.com/kust1q/Zapp/backend/internal/dto"
 )
 
 type AuthService interface {
-	SignUp(ctx context.Context, user *dto.SignUpRequest) (dto.SignUpResponse, error)
-	SignIn(ctx context.Context, credential *dto.SignInRequest) (dto.SignInResponse, error)
-	Refresh(ctx context.Context, token *dto.RefreshRequest) (dto.SignInResponse, error)
+	SignUp(ctx context.Context, user *dto.SignUpRequest) (*dto.SignUpResponse, error)
+	SignIn(ctx context.Context, credential *dto.SignInRequest) (*dto.SignInResponse, error)
+	Refresh(ctx context.Context, token *dto.RefreshRequest) (*dto.SignInResponse, error)
 	SignOut(ctx context.Context, token *dto.RefreshRequest) error
 	VerifyAccessToken(tokenString string) (int, error)
 	UpdateSecuritySettings(ctx context.Context, userID int, req *dto.UpdateSecuritySettingsRequest) error
@@ -21,16 +24,18 @@ type AuthService interface {
 }
 
 type TweetService interface {
-	CreateTweet(ctx context.Context, userID int, tweet *dto.CreateTweetRequest) (dto.TweetResponse, error)
-	GetTweetById(ctx context.Context, tweetID int) (dto.TweetResponseWithCounters, error)
-	UpdateTweet(ctx context.Context, userID, tweetID int, req *dto.UpdateTweetRequest) (dto.UpdateTweetResponse, error)
+	CreateTweet(ctx context.Context, userID int, tweet *dto.CreateTweetRequest) (*dto.TweetResponse, error)
+	CreateTweetWithMedia(ctx context.Context, userID int, tweet *dto.CreateTweetRequest, file *dto.FileData) (*dto.TweetResponse, error)
+	GetTweetById(ctx context.Context, tweetID int) (*dto.TweetResponseWithCounters, error)
+	UpdateTweet(ctx context.Context, userID, tweetID int, req *dto.UpdateTweetRequest) (*dto.UpdateTweetResponse, error)
 	LikeTweet(ctx context.Context, userID, tweetID int) error
 	UnlikeTweet(ctx context.Context, userID, tweetID int) error
-	ReplyToTweet(ctx context.Context, userID, tweetID int, tweet *dto.CreateTweetRequest) (dto.TweetResponse, error)
+	ReplyToTweet(ctx context.Context, userID, tweetID int, tweet *dto.CreateTweetRequest) (*dto.TweetResponse, error)
+	ReplyToTweetWithMedia(ctx context.Context, userID, tweetID int, tweet *dto.CreateTweetRequest, file *dto.FileData) (*dto.TweetResponse, error)
 	GetRepliesToTweet(ctx context.Context, tweetID int) ([]dto.TweetResponse, error)
 	CreateRetweet(ctx context.Context, userID, tweetID int) error
 	DeleteRetweet(ctx context.Context, userID, retweetID int) error
-	GetTweetsByUsername(ctx context.Context, username string) ([]dto.TweetResponse, error)
+	GetTweetsAndRetweetsByUsername(ctx context.Context, username string) ([]dto.TweetResponse, error)
 	GetLikes(ctx context.Context, tweetID int) ([]dto.UserLikeResponse, error)
 	DeleteTweet(ctx context.Context, userID, tweetID int) error
 }
@@ -45,6 +50,8 @@ type FeedService interface {
 }
 
 type MediaService interface {
+	UploadAndAttachTweetMediaTx(ctx context.Context, tweetID int, file io.Reader, filename string, tx *sql.Tx) (*entity.TweetMedia, error)
+	DeleteTweetMedia(ctx context.Context, tweetID int) error
 }
 
 type Handler struct {
@@ -98,7 +105,7 @@ func (h *Handler) InitRouters() *gin.Engine {
 		public.GET("/tweets/:id/replies", h.getReplies)
 		public.GET("/tweets/:id/likes", h.getLikes)
 		public.GET("/users/:username", h.getByUsername)
-		public.GET("/users/:username/tweets", h.getTweetsByUsername)
+		public.GET("/users/:username/tweets", h.getTweetsAndRetweetsByUsername)
 		public.GET("/users/:username/followers", h.followers)
 		public.GET("/users/:username/following", h.following)
 		public.GET("/search", h.search)

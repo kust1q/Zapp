@@ -9,12 +9,13 @@ type CreateTweetRequest struct {
 }
 
 type TweetResponse struct {
-	ID            int       `json:"id"`
-	UserID        int       `json:"user_id"`
-	Content       string    `json:"content"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
-	ParentTweetID *int      `json:"parent_tweet_id,omitempty"`
+	ID            int                `json:"id"`
+	Content       string             `json:"content"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+	ParentTweetID *int               `json:"parent_tweet_id,omitempty"`
+	Media         TweetMediaResponse `json:"media,omitempty"`
+	Author        UserResponse       `json:"author"`
 }
 
 type TweetResponseWithCounters struct {
@@ -25,7 +26,7 @@ type TweetResponseWithCounters struct {
 }
 
 type UpdateTweetRequest struct {
-	Content string `json:"content" binding:"required,min=1,max=280"`
+	Content string `json:"content" binding:"max=280"`
 }
 
 type UpdateTweetResponse struct {
@@ -36,7 +37,7 @@ type UpdateTweetResponse struct {
 }
 
 type UserLikeResponse struct {
-	UserID    int    `json:"user_id"`
-	Username  string `json:"username"`
-	AvatarURL string `json:"avatar_url"`
+	UserID   int            `json:"user_id" db:"user_id"`
+	Username string         `json:"username" db:"username"`
+	Avatar   AvatarResponse `json:"avatar" db:"avatar"`
 }

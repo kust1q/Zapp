@@ -16,10 +16,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var (
-	ErrInvalidCredentials = errors.New("invalid credential")
-)
-
 type AccessClaims struct {
 	UserID int    `json:"user_id"`
 	Email  string `json:"email"`
@@ -27,7 +23,7 @@ type AccessClaims struct {
 	jwt.RegisteredClaims
 }
 
-func (s *authService) SignIn(ctx context.Context, credential *dto.SignInRequest) (dto.SignInResponse, error) {
+func (s *authService) SignIn(ctx context.Context, credential *dto.SignInRequest) (*dto.SignInResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
@@ -37,13 +33,13 @@ func (s *authService) SignIn(ctx context.Context, credential *dto.SignInRequest)
 	user, err := s.storage.GetUserByEmail(ctx, credential.Email)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return dto.SignInResponse{}, ErrInvalidCredentials
+			return &dto.SignInResponse{}, ErrInvalidCredentials
 		}
-		return dto.SignInResponse{}, fmt.Errorf("failed to find user: %w", err)
+		return &dto.SignInResponse{}, fmt.Errorf("failed to find user: %w", err)
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(credential.Password)); err != nil {
-		return dto.SignInResponse{}, ErrInvalidCredentials
+		return &dto.SignInResponse{}, ErrInvalidCredentials
 	}
 
 	role := "user"
@@ -53,15 +49,15 @@ func (s *authService) SignIn(ctx context.Context, credential *dto.SignInRequest)
 
 	accessToken, err := s.generateAccessToken(user.ID, user.Email, role)
 	if err != nil {
-		return dto.SignInResponse{}, fmt.Errorf("failed to generate access token: %w", err)
+		return &dto.SignInResponse{}, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
 	refreshToken, err := s.generateRefreshToken(ctx, strconv.Itoa(user.ID))
 	if err != nil {
-		return dto.SignInResponse{}, fmt.Errorf("failed to generate refresh token: %w", err)
+		return &dto.SignInResponse{}, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
 
-	return dto.SignInResponse{
+	return &dto.SignInResponse{
 		Access:  accessToken,
 		Refresh: refreshToken,
 	}, nil

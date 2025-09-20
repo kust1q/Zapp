@@ -13,12 +13,6 @@ type Tweet struct {
 	UpdatedAt     time.Time `db:"updated_at"`
 }
 
-type TweetMedia struct {
-	TweetID   int    `db:"tweet_id"`
-	MediaURL  string `db:"media_url"`
-	MediaType string `db:"media_type"`
-}
-
 type Retweet struct {
 	ID        int       `db:"id"`
 	UserID    int       `db:"user_id"`

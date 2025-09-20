@@ -9,7 +9,7 @@ import (
 	"github.com/kust1q/Zapp/backend/internal/dto"
 )
 
-func (s *tweetService) ReplyToTweet(ctx context.Context, userID, tweetID int, tweet *dto.CreateTweetRequest) (dto.TweetResponse, error) {
+func (s *tweetService) ReplyToTweet(ctx context.Context, userID, tweetID int, tweet *dto.CreateTweetRequest) (*dto.TweetResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	domainTweet := entity.Tweet{
@@ -22,16 +22,97 @@ func (s *tweetService) ReplyToTweet(ctx context.Context, userID, tweetID int, tw
 
 	createdTweet, err := s.storage.CreateTweet(ctx, &domainTweet)
 	if err != nil {
-		return dto.TweetResponse{}, fmt.Errorf("tweet creation failed: %w", err)
+		return &dto.TweetResponse{}, fmt.Errorf("tweet creation failed: %w", err)
 	}
 
-	return dto.TweetResponse{
+	author, err := s.storage.GetUserByID(ctx, userID)
+	if err != nil {
+		return &dto.TweetResponse{}, fmt.Errorf("failed to get tweet author")
+	}
+
+	avatar, err := s.media.GetAvatarByUserID(ctx, userID)
+	if err != nil {
+		return &dto.TweetResponse{}, fmt.Errorf("failed to get user avatar")
+	}
+
+	return &dto.TweetResponse{
 		ID:            createdTweet.ID,
-		UserID:        createdTweet.UserID,
 		Content:       createdTweet.Content,
 		CreatedAt:     createdTweet.CreatedAt,
 		UpdatedAt:     createdTweet.UpdatedAt,
 		ParentTweetID: &createdTweet.ParentTweetID,
+		Author: dto.UserResponse{
+			ID:       author.ID,
+			Username: author.Username,
+			Avatar: dto.Avatar{
+				MediaURL:  avatar.MediaURL,
+				MimeType:  avatar.MimeType,
+				SizeBytes: avatar.SizeBytes,
+			},
+		},
+	}, nil
+}
+
+func (s *tweetService) ReplyToTweetWithMedia(ctx context.Context, userID, tweetID int, tweet *dto.CreateTweetRequest, file *dto.FileData) (*dto.TweetResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	tx, err := s.storage.BeginTx(ctx)
+	if err != nil {
+		return &dto.TweetResponse{}, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	domainTweet := entity.Tweet{
+		UserID:        userID,
+		ParentTweetID: tweetID,
+		Content:       tweet.Content,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+
+	createdTweet, err := s.storage.CreateTweetTx(ctx, tx, &domainTweet)
+	if err != nil {
+		return &dto.TweetResponse{}, fmt.Errorf("user creation failed: %w", err)
+	}
+
+	media, err := s.media.UploadAndAttachTweetMediaTx(ctx, createdTweet.ID, file.File, file.Header.Filename, tx)
+
+	if err := tx.Commit(); err != nil {
+		return &dto.TweetResponse{}, fmt.Errorf("commit transaction failed: %w", err)
+	}
+
+	author, err := s.storage.GetUserByID(ctx, userID)
+	if err != nil {
+		return &dto.TweetResponse{}, fmt.Errorf("failed to get tweet author")
+	}
+
+	avatar, err := s.media.GetAvatarByUserID(ctx, userID)
+	if err != nil {
+		return &dto.TweetResponse{}, fmt.Errorf("failed to get user avatar")
+	}
+
+	return &dto.TweetResponse{
+		ID:            createdTweet.ID,
+		Content:       createdTweet.Content,
+		CreatedAt:     createdTweet.CreatedAt,
+		UpdatedAt:     createdTweet.UpdatedAt,
+		ParentTweetID: &createdTweet.ParentTweetID,
+		Media: dto.TweetMediaResponse{
+			ID:        media.ID,
+			TweetID:   media.TweetID,
+			MediaURL:  media.MediaURL,
+			MimeType:  media.MimeType,
+			SizeBytes: media.SizeBytes,
+		},
+		Author: dto.UserResponse{
+			ID:       author.ID,
+			Username: author.Username,
+			Avatar: dto.Avatar{
+				MediaURL:  avatar.MediaURL,
+				MimeType:  avatar.MimeType,
+				SizeBytes: avatar.SizeBytes,
+			},
+		},
 	}, nil
 }
 
@@ -46,14 +127,11 @@ func (s *tweetService) GetRepliesToTweet(ctx context.Context, tweetID int) ([]dt
 
 	res := make([]dto.TweetResponse, 0, len(replies))
 	for _, r := range replies {
-		res = append(res, dto.TweetResponse{
-			ID:            r.ID,
-			UserID:        r.UserID,
-			Content:       r.Content,
-			CreatedAt:     r.CreatedAt,
-			UpdatedAt:     r.UpdatedAt,
-			ParentTweetID: &r.ParentTweetID,
-		})
+		tr, err := s.tweetResponseByTweet(ctx, &r)
+		if err != nil {
+			return []dto.TweetResponse{}, fmt.Errorf("failed to get tweet responses by username: %w", err)
+		}
+		res = append(res, *tr)
 	}
 	return res, nil
 }

@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -10,10 +9,6 @@ import (
 
 	"github.com/kust1q/Zapp/backend/internal/dto"
 	"golang.org/x/crypto/bcrypt"
-)
-
-var (
-	ErrInvalidPassword = errors.New("invalid password")
 )
 
 func (s *authService) ResetPassword(ctx context.Context, userID int, req *dto.ResetPasswordRequest) error {

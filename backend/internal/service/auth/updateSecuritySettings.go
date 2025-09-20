@@ -2,17 +2,12 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
 	"github.com/kust1q/Zapp/backend/internal/dto"
 	"golang.org/x/crypto/bcrypt"
-)
-
-var (
-	ErrInvalidSecretAnswer = errors.New("Invalid secret answer")
 )
 
 func (s *authService) UpdateSecuritySettings(ctx context.Context, userID int, req *dto.UpdateSecuritySettingsRequest) error {
