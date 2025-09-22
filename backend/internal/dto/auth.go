@@ -13,13 +13,13 @@ type SignUpRequest struct {
 }
 
 type SignUpResponse struct {
-	ID        int            `json:"id"`
-	Username  string         `json:"username"`
-	Email     string         `json:"email"`
-	Bio       string         `json:"bio"`
-	Gen       string         `json:"gen"`
-	Avatar    AvatarResponse `json:"avatar"`
-	CreatedAt time.Time      `json:"created_at"`
+	ID        int       `json:"id"`
+	Username  string    `json:"username"`
+	Email     string    `json:"email"`
+	Bio       string    `json:"bio"`
+	Gen       string    `json:"gen"`
+	Avatar    Avatar    `json:"avatar"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type SignInRequest struct {

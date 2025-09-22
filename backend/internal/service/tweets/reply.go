@@ -41,7 +41,7 @@ func (s *tweetService) ReplyToTweet(ctx context.Context, userID, tweetID int, tw
 		CreatedAt:     createdTweet.CreatedAt,
 		UpdatedAt:     createdTweet.UpdatedAt,
 		ParentTweetID: &createdTweet.ParentTweetID,
-		Author: dto.UserResponse{
+		Author: dto.SmallUserResponse{
 			ID:       author.ID,
 			Username: author.Username,
 			Avatar: dto.Avatar{
@@ -97,14 +97,14 @@ func (s *tweetService) ReplyToTweetWithMedia(ctx context.Context, userID, tweetI
 		CreatedAt:     createdTweet.CreatedAt,
 		UpdatedAt:     createdTweet.UpdatedAt,
 		ParentTweetID: &createdTweet.ParentTweetID,
-		Media: dto.TweetMediaResponse{
+		Media: dto.TweetMedia{
 			ID:        media.ID,
 			TweetID:   media.TweetID,
 			MediaURL:  media.MediaURL,
 			MimeType:  media.MimeType,
 			SizeBytes: media.SizeBytes,
 		},
-		Author: dto.UserResponse{
+		Author: dto.SmallUserResponse{
 			ID:       author.ID,
 			Username: author.Username,
 			Avatar: dto.Avatar{

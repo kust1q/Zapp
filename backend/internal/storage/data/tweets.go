@@ -56,6 +56,9 @@ func (s *dataStorage) UpdateTweet(ctx context.Context, tweet *entity.Tweet) (*en
 func (s *dataStorage) DeleteTweet(ctx context.Context, userID, tweetID int) error {
 	query := fmt.Sprintf("DELETE FROM %s WHERE id = $1 AND user_id = $2", postgres.TweetsTable)
 	result, err := s.db.ExecContext(ctx, query, tweetID, userID)
+	if err != nil {
+		return err
+	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return err
@@ -84,6 +87,9 @@ func (s *dataStorage) LikeTweet(ctx context.Context, userID, tweetID int) error 
 func (s *dataStorage) UnLikeTweet(ctx context.Context, userID, tweetID int) error {
 	query := fmt.Sprintf("DELETE FROM %s WHERE user_id = $1 AND tweet_id = $2", postgres.LikesTable)
 	result, err := s.db.ExecContext(ctx, query, userID, tweetID)
+	if err != nil {
+		return err
+	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return err
@@ -112,6 +118,9 @@ func (s *dataStorage) Retweet(ctx context.Context, userID, tweetID int, createdA
 func (s *dataStorage) DeleteRetweet(ctx context.Context, userID, retweetID int) error {
 	query := fmt.Sprintf("DELETE FROM %s WHERE user_id = $1 AND tweet_id = $2", postgres.RetweetsTable)
 	result, err := s.db.ExecContext(ctx, query, userID, retweetID)
+	if err != nil {
+		return err
+	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return err
@@ -124,7 +133,7 @@ func (s *dataStorage) DeleteRetweet(ctx context.Context, userID, retweetID int) 
 }
 
 func (s *dataStorage) GetRepliesToParentTweet(ctx context.Context, parentTweetID int) ([]entity.Tweet, error) {
-	query := fmt.Sprintf("SELECT id, user_id, parent_tweet_id, content, created_at, updated_at FROM %s WHERE parent_tweet_id = $1 ORDER BY created_at DES", postgres.TweetsTable)
+	query := fmt.Sprintf("SELECT id, user_id, parent_tweet_id, content, created_at, updated_at FROM %s WHERE parent_tweet_id = $1 ORDER BY created_at DESC", postgres.TweetsTable)
 	var tweets []entity.Tweet
 	if err := s.db.SelectContext(ctx, &tweets, query, parentTweetID); err != nil {
 		return nil, err

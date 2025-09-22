@@ -14,6 +14,7 @@ import (
 	"github.com/kust1q/Zapp/backend/internal/service/auth"
 	"github.com/kust1q/Zapp/backend/internal/service/media"
 	"github.com/kust1q/Zapp/backend/internal/service/tweets"
+	"github.com/kust1q/Zapp/backend/internal/service/user"
 	"github.com/kust1q/Zapp/backend/internal/storage/cache"
 	"github.com/kust1q/Zapp/backend/internal/storage/data"
 	"github.com/kust1q/Zapp/backend/internal/storage/minio"
@@ -106,6 +107,7 @@ func main() {
 		},
 	}
 	objectStorage := objects.NewObjectStorage(minio, objects.ObjectStorageConfig{Endpoint: cfg.Minio.Endpoint, BucketName: cfg.Minio.BucketName, UseSSL: cfg.Minio.UseSSL}, mediaTypeMap)
+
 	//Init services
 	mediaService := media.NewMediaService(dataStorage, objectStorage)
 	authService := auth.NewAuthService(
@@ -115,12 +117,13 @@ func main() {
 		mediaService,
 		data.NewTokenStorage(redis))
 	tweetService := tweets.NewTweetService(dataStorage, mediaService)
+	userService := user.NewUserService(dataStorage, mediaService)
 
 	//Init handler
 	handler := http.NewHandler(
 		authService,
 		tweetService,
-		authService,
+		userService,
 		authService,
 		authService,
 		mediaService,

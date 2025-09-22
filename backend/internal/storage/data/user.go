@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
+	"github.com/kust1q/Zapp/backend/internal/dto"
 	"github.com/kust1q/Zapp/backend/internal/storage/cache"
 	"github.com/kust1q/Zapp/backend/internal/storage/postgres"
 )
@@ -79,6 +81,12 @@ func (s *dataStorage) UpdateUserPassword(ctx context.Context, userID int, passwo
 	return err
 }
 
+func (s *dataStorage) UpdateUserBio(ctx context.Context, userID int, bio string) error {
+	query := fmt.Sprintf("UPDATE %s SET bio = $1 WHERE id = $2", postgres.UserTable)
+	_, err := s.db.ExecContext(ctx, query, bio, userID)
+	return err
+}
+
 func (s *dataStorage) GetSecurityDataByUserID(ctx context.Context, userID int) (*entity.SecretQuestion, error) {
 	query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1", postgres.SecretQuestionTable)
 	var question entity.SecretQuestion
@@ -114,8 +122,78 @@ func (s *dataStorage) UserExistsByUsername(ctx context.Context, username string)
 	return count > 0, err
 }
 
+func (s *dataStorage) FollowToUser(ctx context.Context, followerID, followingID int, createdAt time.Time) (*dto.FollowResponse, error) {
+	query := fmt.Sprintf("INSERT INTO %s (follower_id, following_id, created_at) VALUES ($1, $2, $3)", postgres.FollowsTable)
+	_, err := s.db.ExecContext(ctx, query, followerID, followingID, createdAt)
+	if err != nil {
+		return &dto.FollowResponse{}, nil
+	}
+	return &dto.FollowResponse{
+		FollowerID:  followerID,
+		FollowingID: followingID,
+		CreatedAt:   createdAt,
+	}, nil
+}
+
+func (s *dataStorage) UnfollowUser(ctx context.Context, followerID, followingID int) error {
+	query := fmt.Sprintf("DELETE FROM %s WHERE follower_id = $1 AND following_id = $2", postgres.FollowsTable)
+	result, err := s.db.ExecContext(ctx, query, followerID, followingID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("follow not found")
+	}
+	return nil
+}
+
+func (s *dataStorage) GetFollowersIds(ctx context.Context, username string) ([]int, error) {
+	query := fmt.Sprintf(`
+        SELECT f.follower_id
+        FROM %s f
+        JOIN %s u ON f.following_id = u.id
+        WHERE u.username = $1`,
+		postgres.FollowsTable, postgres.UserTable)
+
+	var res []int
+	if err := s.db.SelectContext(ctx, &res, query, username); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func (s *dataStorage) GetFollowingsIds(ctx context.Context, username string) ([]int, error) {
+	query := fmt.Sprintf(`
+        SELECT f.following_id
+        FROM %s f
+        JOIN %s u ON f.follower_id = u.id
+        WHERE u.username = $1`,
+		postgres.FollowsTable, postgres.UserTable)
+
+	var res []int
+	if err := s.db.SelectContext(ctx, &res, query, username); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 func (s *dataStorage) DeleteUser(ctx context.Context, userID int) error {
 	query := fmt.Sprintf("DELETE FROM %s WHERE id = $1", postgres.UserTable)
-	_, err := s.db.ExecContext(ctx, query, userID)
-	return err
+	result, err := s.db.ExecContext(ctx, query, userID)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("user not found")
+	}
+
+	return nil
 }

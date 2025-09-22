@@ -2,13 +2,10 @@ package http
 
 import (
 	"context"
-	"database/sql"
-	"io"
 	"net/http"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/kust1q/Zapp/backend/internal/domain/entity"
 	"github.com/kust1q/Zapp/backend/internal/dto"
 )
 
@@ -41,6 +38,14 @@ type TweetService interface {
 }
 
 type UserService interface {
+	Update(ctx context.Context, userID int, req *dto.UpdateBioRequest) error
+	FollowToUser(ctx context.Context, followerID, followingID int) (*dto.FollowResponse, error)
+	UnfollowUser(ctx context.Context, followerID, followingID int) error
+	GetFollowers(ctx context.Context, username string) ([]dto.SmallUserResponse, error)
+	GetFollowings(ctx context.Context, username string) ([]dto.SmallUserResponse, error)
+	GetUserProfile(ctx context.Context, username string) (*dto.UserProfileResponse, error)
+	GetMe(ctx context.Context, userID int) (*dto.UserProfileResponse, error)
+	DeleteUser(ctx context.Context, userID int) error
 }
 
 type SearchService interface {
@@ -50,8 +55,7 @@ type FeedService interface {
 }
 
 type MediaService interface {
-	UploadAndAttachTweetMediaTx(ctx context.Context, tweetID int, file io.Reader, filename string, tx *sql.Tx) (*entity.TweetMedia, error)
-	DeleteTweetMedia(ctx context.Context, tweetID int) error
+	GetMediaByTweetID(ctx context.Context, tweetID int) (*dto.TweetMedia, error)
 }
 
 type Handler struct {
@@ -101,10 +105,10 @@ func (h *Handler) InitRouters() *gin.Engine {
 
 	public := api.Group("/public")
 	{
-		public.GET("/tweets/:id", h.getTweetById)
-		public.GET("/tweets/:id/replies", h.getReplies)
-		public.GET("/tweets/:id/likes", h.getLikes)
-		public.GET("/users/:username", h.getByUsername)
+		public.GET("/tweets/:tweet_id", h.getTweetById)
+		public.GET("/tweets/:tweet_id/replies", h.getReplies)
+		public.GET("/tweets/:tweet_id/likes", h.getLikes)
+		public.GET("/users/:username/profile", h.getUserProfile)
 		public.GET("/users/:username/tweets", h.getTweetsAndRetweetsByUsername)
 		public.GET("/users/:username/followers", h.followers)
 		public.GET("/users/:username/following", h.following)
@@ -119,23 +123,22 @@ func (h *Handler) InitRouters() *gin.Engine {
 		tweets := protected.Group("/tweets")
 		{
 			tweets.POST("", h.createTweet)
-			tweets.PUT("/:id", h.updateTweet)
-			tweets.DELETE("/:id", h.deleteTweet)
+			tweets.PUT("/:tweet_id", h.updateTweet)
+			tweets.DELETE("/:tweet_id", h.deleteTweet)
 
-			tweets.POST("/:id/like", h.likeTweet)
-			tweets.DELETE("/:id/like", h.unlikeTweet)
+			tweets.POST("/:tweet_id/like", h.likeTweet)
+			tweets.DELETE("/:tweet_id/like", h.unlikeTweet)
 
-			tweets.POST("/:id/reply", h.replyToTweet)
+			tweets.POST("/:tweet_id/reply", h.replyToTweet)
 
-			tweets.POST("/:id/retweet", h.retweet)
-			tweets.DELETE("/retweets/:id", h.deleteRetweet)
-		}
+			tweets.POST("/:tweet_id/retweet", h.retweet)
+			tweets.DELETE("/retweets/:tweet_id", h.deleteRetweet)
 
-		media := protected.Group("/media")
-		{
-			media.POST("", h.uploadMedia)
-			media.GET("/:id", h.getMedia)
-			media.DELETE("/:id", h.deleteMedia)
+			media := tweets.Group("/media")
+			{
+				media.GET("/:tweet_id", h.getMedia)
+				media.DELETE("/:tweet_id", h.deleteMedia)
+			}
 		}
 
 		users := protected.Group("/users")
@@ -143,8 +146,8 @@ func (h *Handler) InitRouters() *gin.Engine {
 			users.GET("/me", h.getMe)
 			users.PUT("/me", h.updateMe)
 			users.DELETE("/me", h.deleteMe)
-			users.POST("/:username/follow", h.followUser)
-			users.DELETE("/:username/follow", h.unfollowUser)
+			users.POST("/:user_id/follow", h.followUser)
+			users.DELETE("/:user_id/follow", h.unfollowUser)
 		}
 
 		feed := protected.Group("/feed")

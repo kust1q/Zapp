@@ -39,7 +39,7 @@ func (s *tweetService) CreateTweet(ctx context.Context, userID int, tweet *dto.C
 		Content:   createdTweet.Content,
 		CreatedAt: createdTweet.CreatedAt,
 		UpdatedAt: createdTweet.UpdatedAt,
-		Author: dto.UserResponse{
+		Author: dto.SmallUserResponse{
 			ID:       author.ID,
 			Username: author.Username,
 			Avatar: dto.Avatar{
@@ -93,14 +93,14 @@ func (s *tweetService) CreateTweetWithMedia(ctx context.Context, userID int, twe
 		Content:   createdTweet.Content,
 		CreatedAt: createdTweet.CreatedAt,
 		UpdatedAt: createdTweet.UpdatedAt,
-		Media: dto.TweetMediaResponse{
+		Media: dto.TweetMedia{
 			ID:        media.ID,
 			TweetID:   media.TweetID,
 			MediaURL:  media.MediaURL,
 			MimeType:  media.MimeType,
 			SizeBytes: media.SizeBytes,
 		},
-		Author: dto.UserResponse{
+		Author: dto.SmallUserResponse{
 			ID:       author.ID,
 			Username: author.Username,
 			Avatar: dto.Avatar{

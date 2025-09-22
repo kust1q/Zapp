@@ -1,12 +1,14 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/kust1q/Zapp/backend/internal/dto"
+	"github.com/kust1q/Zapp/backend/internal/service/tweets"
 	"github.com/sirupsen/logrus"
 )
 
@@ -23,7 +25,7 @@ func (h *Handler) createTweet(c *gin.Context) {
 		return
 	}
 
-	var input dto.CreateTweetRequest
+	var request dto.CreateTweetRequest
 	var tweet *dto.TweetResponse
 
 	ct := c.ContentType()
@@ -32,9 +34,9 @@ func (h *Handler) createTweet(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse form data"})
 			return
 		}
-		input.Content = c.PostForm("content")
+		request.Content = c.PostForm("content")
 	} else {
-		if err := c.BindJSON(&input); err != nil {
+		if err := c.BindJSON(&request); err != nil {
 			logrus.WithError(err).Error("failed to create tweet - invalid request body")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 			return
@@ -53,7 +55,7 @@ func (h *Handler) createTweet(c *gin.Context) {
 		return
 	}
 
-	if fileHeader == nil && strings.TrimSpace(input.Content) == "" {
+	if fileHeader == nil && strings.TrimSpace(request.Content) == "" {
 		logrus.WithError(err).Error("failed to create tweet - impossible create empty tweet")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "impossible create empty tweet"})
 		return
@@ -69,9 +71,9 @@ func (h *Handler) createTweet(c *gin.Context) {
 			File:   openedFile,
 			Header: fileHeader,
 		}
-		tweet, err = h.tweetService.CreateTweetWithMedia(c.Request.Context(), userID.(int), &input, &file)
+		tweet, err = h.tweetService.CreateTweetWithMedia(c.Request.Context(), userID.(int), &request, &file)
 	} else {
-		tweet, err = h.tweetService.CreateTweet(c.Request.Context(), userID.(int), &input)
+		tweet, err = h.tweetService.CreateTweet(c.Request.Context(), userID.(int), &request)
 	}
 
 	if err != nil {
@@ -100,21 +102,21 @@ func (h *Handler) updateTweet(c *gin.Context) {
 		})
 		return
 	}
-	tweetID, err := strconv.Atoi(c.Param("id"))
+	tweetID, err := strconv.Atoi(c.Param("tweet_id"))
 	if err != nil || tweetID == 0 {
 		logrus.WithError(err).Error("failed to update tweet - invalid tweetID")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tweetID"})
 		return
 	}
 
-	var input dto.UpdateTweetRequest
-	if err := c.BindJSON(&input); err != nil {
+	var request dto.UpdateTweetRequest
+	if err := c.BindJSON(&request); err != nil {
 		logrus.WithError(err).Error("failed to update tweet - invalid request body")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
-	response, err := h.tweetService.UpdateTweet(c.Request.Context(), userID.(int), tweetID, &input)
+	response, err := h.tweetService.UpdateTweet(c.Request.Context(), userID.(int), tweetID, &request)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"user_id":  userID,
@@ -138,7 +140,7 @@ func (h *Handler) likeTweet(c *gin.Context) {
 		})
 		return
 	}
-	tweetID, err := strconv.Atoi(c.Param("id"))
+	tweetID, err := strconv.Atoi(c.Param("tweet_id"))
 	if err != nil || tweetID == 0 {
 		logrus.WithError(err).Error("failed to like tweet - invalid tweetID")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tweetID"})
@@ -174,7 +176,7 @@ func (h *Handler) unlikeTweet(c *gin.Context) {
 		})
 		return
 	}
-	tweetID, err := strconv.Atoi(c.Param("id"))
+	tweetID, err := strconv.Atoi(c.Param("tweet_id"))
 	if err != nil || tweetID == 0 {
 		logrus.WithError(err).Error("failed to unlike tweet - invalid tweetID")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tweetID"})
@@ -210,7 +212,7 @@ func (h *Handler) retweet(c *gin.Context) {
 		})
 		return
 	}
-	tweetID, err := strconv.Atoi(c.Param("id"))
+	tweetID, err := strconv.Atoi(c.Param("tweet_id"))
 	if err != nil || tweetID == 0 {
 		logrus.WithError(err).Error("failed to retweet - invalid tweetID")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tweetID"})
@@ -246,7 +248,7 @@ func (h *Handler) deleteRetweet(c *gin.Context) {
 		})
 		return
 	}
-	retweetID, err := strconv.Atoi(c.Param("id"))
+	retweetID, err := strconv.Atoi(c.Param("tweet_id"))
 	if err != nil || retweetID == 0 {
 		logrus.WithError(err).Error("failed to delete retweet - invalid retweetID")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid retweetID"})
@@ -282,14 +284,14 @@ func (h *Handler) replyToTweet(c *gin.Context) {
 		})
 		return
 	}
-	tweetID, err := strconv.Atoi(c.Param("id"))
+	tweetID, err := strconv.Atoi(c.Param("tweet_id"))
 	if err != nil || tweetID == 0 {
 		logrus.WithError(err).Error("failed to reply - invalid tweetID")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tweetID"})
 		return
 	}
 
-	var input dto.CreateTweetRequest
+	var request dto.CreateTweetRequest
 	var tweet *dto.TweetResponse
 
 	ct := c.ContentType()
@@ -298,9 +300,9 @@ func (h *Handler) replyToTweet(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to parse form data"})
 			return
 		}
-		input.Content = c.PostForm("content")
+		request.Content = c.PostForm("content")
 	} else {
-		if err := c.BindJSON(&input); err != nil {
+		if err := c.BindJSON(&request); err != nil {
 			logrus.WithError(err).Error("failed to create tweet - invalid request body")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 			return
@@ -320,7 +322,7 @@ func (h *Handler) replyToTweet(c *gin.Context) {
 		return
 	}
 
-	if fileHeader == nil && strings.TrimSpace(input.Content) == "" {
+	if fileHeader == nil && strings.TrimSpace(request.Content) == "" {
 		logrus.WithError(err).Error("failed to create tweet - impossible create empty tweet")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "impossible create empty tweet"})
 		return
@@ -336,9 +338,9 @@ func (h *Handler) replyToTweet(c *gin.Context) {
 			File:   openedFile,
 			Header: fileHeader,
 		}
-		tweet, err = h.tweetService.ReplyToTweetWithMedia(c.Request.Context(), userID.(int), tweetID, &input, &file)
+		tweet, err = h.tweetService.ReplyToTweetWithMedia(c.Request.Context(), userID.(int), tweetID, &request, &file)
 	} else {
-		tweet, err = h.tweetService.ReplyToTweet(c.Request.Context(), userID.(int), tweetID, &input)
+		tweet, err = h.tweetService.ReplyToTweet(c.Request.Context(), userID.(int), tweetID, &request)
 	}
 
 	if err != nil {
@@ -362,7 +364,7 @@ func (h *Handler) replyToTweet(c *gin.Context) {
 }
 
 func (h *Handler) getReplies(c *gin.Context) {
-	tweetID, err := strconv.Atoi(c.Param("id"))
+	tweetID, err := strconv.Atoi(c.Param("tweet_id"))
 	if err != nil || tweetID == 0 {
 		logrus.WithError(err).Error("failed to reply - invalid tweetID")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tweetID"})
@@ -384,7 +386,7 @@ func (h *Handler) getReplies(c *gin.Context) {
 }
 
 func (h *Handler) getTweetById(c *gin.Context) {
-	tweetID, err := strconv.Atoi(c.Param("id"))
+	tweetID, err := strconv.Atoi(c.Param("tweet_id"))
 	if err != nil || tweetID == 0 {
 		logrus.WithError(err).Error("failed to reply - invalid tweetID")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tweetID"})
@@ -409,7 +411,7 @@ func (h *Handler) getTweetsAndRetweetsByUsername(c *gin.Context) {
 	username := c.Param("username")
 	if username == "" {
 		logrus.Error("failed to get tweet by username - invalid username")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tweetID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid username"})
 		return
 	}
 
@@ -429,7 +431,7 @@ func (h *Handler) getTweetsAndRetweetsByUsername(c *gin.Context) {
 }
 
 func (h *Handler) getLikes(c *gin.Context) {
-	tweetID, err := strconv.Atoi(c.Param("id"))
+	tweetID, err := strconv.Atoi(c.Param("tweet_id"))
 	if err != nil || tweetID == 0 {
 		logrus.WithError(err).Error("failed to reply - invalid tweetID")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tweetID"})
@@ -458,7 +460,7 @@ func (h *Handler) deleteTweet(c *gin.Context) {
 		})
 		return
 	}
-	tweetID, err := strconv.Atoi(c.Param("id"))
+	tweetID, err := strconv.Atoi(c.Param("tweet_id"))
 	if err != nil || tweetID == 0 {
 		logrus.WithError(err).Error("failed to delete - invalid tweetID")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tweetID"})
@@ -466,6 +468,17 @@ func (h *Handler) deleteTweet(c *gin.Context) {
 	}
 
 	if err := h.tweetService.DeleteTweet(c.Request.Context(), userID.(int), tweetID); err != nil {
+		if errors.Is(err, tweets.ErrNotEnoughRights) {
+			logrus.WithFields(logrus.Fields{
+				"user_id":  userID,
+				"tweet_id": tweetID,
+				"error":    err,
+			}).Error("tweet delete failed - not enough rights")
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "forbidden",
+			})
+			return
+		}
 		logrus.WithFields(logrus.Fields{
 			"user_id":  userID,
 			"tweet_id": tweetID,
