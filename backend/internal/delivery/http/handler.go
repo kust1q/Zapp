@@ -55,7 +55,9 @@ type FeedService interface {
 }
 
 type MediaService interface {
-	GetMediaByTweetID(ctx context.Context, tweetID int) (*dto.TweetMedia, error)
+	GetMediaDataByTweetID(ctx context.Context, tweetID int) (*dto.TweetMediaDataResponse, error)
+	GetAvatarDataByUserID(ctx context.Context, userID int) (*dto.AvatarDataResponse, error)
+	DeleteTweetMedia(ctx context.Context, tweetID, userID int) error
 }
 
 type Handler struct {
@@ -108,10 +110,12 @@ func (h *Handler) InitRouters() *gin.Engine {
 		public.GET("/tweets/:tweet_id", h.getTweetById)
 		public.GET("/tweets/:tweet_id/replies", h.getReplies)
 		public.GET("/tweets/:tweet_id/likes", h.getLikes)
+		public.GET("/tweets/media/:tweet_id", h.getTweetMedia)
 		public.GET("/users/:username/profile", h.getUserProfile)
 		public.GET("/users/:username/tweets", h.getTweetsAndRetweetsByUsername)
 		public.GET("/users/:username/followers", h.followers)
 		public.GET("/users/:username/following", h.following)
+		public.GET("/users/avatar/:user_id", h.getAvatar)
 		public.GET("/search", h.search)
 	}
 
@@ -134,11 +138,7 @@ func (h *Handler) InitRouters() *gin.Engine {
 			tweets.POST("/:tweet_id/retweet", h.retweet)
 			tweets.DELETE("/retweets/:tweet_id", h.deleteRetweet)
 
-			media := tweets.Group("/media")
-			{
-				media.GET("/:tweet_id", h.getMedia)
-				media.DELETE("/:tweet_id", h.deleteMedia)
-			}
+			tweets.DELETE("tweets/:tweet_id", h.deleteTweetMedia)
 		}
 
 		users := protected.Group("/users")

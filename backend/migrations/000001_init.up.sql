@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS tweets (
 CREATE TABLE IF NOT EXISTS tweet_media (
     id SERIAL PRIMARY KEY,
     tweet_id INT NOT NULL UNIQUE REFERENCES tweets(id) ON DELETE CASCADE,
-    media_url TEXT NOT NULL,
+    path TEXT NOT NULL,
     mime_type VARCHAR(15) NOT NULL,
     size_bytes BIGINT
 );  
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS tweet_media (
 CREATE TABLE IF NOT EXISTS avatars (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-    media_url TEXT NOT NULL,
+    path TEXT NOT NULL,
     mime_type VARCHAR(15) NOT NULL,
     size_bytes BIGINT
 );

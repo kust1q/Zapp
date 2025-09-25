@@ -30,7 +30,7 @@ func (s *tweetService) ReplyToTweet(ctx context.Context, userID, tweetID int, tw
 		return &dto.TweetResponse{}, fmt.Errorf("failed to get tweet author")
 	}
 
-	avatar, err := s.media.GetAvatarByUserID(ctx, userID)
+	avatarURL, err := s.media.GetAvatarUrlByUserID(ctx, userID)
 	if err != nil {
 		return &dto.TweetResponse{}, fmt.Errorf("failed to get user avatar")
 	}
@@ -42,13 +42,9 @@ func (s *tweetService) ReplyToTweet(ctx context.Context, userID, tweetID int, tw
 		UpdatedAt:     createdTweet.UpdatedAt,
 		ParentTweetID: &createdTweet.ParentTweetID,
 		Author: dto.SmallUserResponse{
-			ID:       author.ID,
-			Username: author.Username,
-			Avatar: dto.Avatar{
-				MediaURL:  avatar.MediaURL,
-				MimeType:  avatar.MimeType,
-				SizeBytes: avatar.SizeBytes,
-			},
+			ID:        author.ID,
+			Username:  author.Username,
+			AvatarURL: avatarURL,
 		},
 	}, nil
 }
@@ -75,7 +71,7 @@ func (s *tweetService) ReplyToTweetWithMedia(ctx context.Context, userID, tweetI
 		return &dto.TweetResponse{}, fmt.Errorf("user creation failed: %w", err)
 	}
 
-	media, err := s.media.UploadAndAttachTweetMediaTx(ctx, createdTweet.ID, file.File, file.Header.Filename, tx)
+	mediaURL, err := s.media.UploadAndAttachTweetMediaTx(ctx, createdTweet.ID, file.File, file.Header.Filename, tx)
 
 	if err := tx.Commit(); err != nil {
 		return &dto.TweetResponse{}, fmt.Errorf("commit transaction failed: %w", err)
@@ -86,7 +82,7 @@ func (s *tweetService) ReplyToTweetWithMedia(ctx context.Context, userID, tweetI
 		return &dto.TweetResponse{}, fmt.Errorf("failed to get tweet author")
 	}
 
-	avatar, err := s.media.GetAvatarByUserID(ctx, userID)
+	avatarURL, err := s.media.GetAvatarUrlByUserID(ctx, userID)
 	if err != nil {
 		return &dto.TweetResponse{}, fmt.Errorf("failed to get user avatar")
 	}
@@ -97,21 +93,11 @@ func (s *tweetService) ReplyToTweetWithMedia(ctx context.Context, userID, tweetI
 		CreatedAt:     createdTweet.CreatedAt,
 		UpdatedAt:     createdTweet.UpdatedAt,
 		ParentTweetID: &createdTweet.ParentTweetID,
-		Media: dto.TweetMedia{
-			ID:        media.ID,
-			TweetID:   media.TweetID,
-			MediaURL:  media.MediaURL,
-			MimeType:  media.MimeType,
-			SizeBytes: media.SizeBytes,
-		},
+		MediaURL:      mediaURL,
 		Author: dto.SmallUserResponse{
-			ID:       author.ID,
-			Username: author.Username,
-			Avatar: dto.Avatar{
-				MediaURL:  avatar.MediaURL,
-				MimeType:  avatar.MimeType,
-				SizeBytes: avatar.SizeBytes,
-			},
+			ID:        author.ID,
+			Username:  author.Username,
+			AvatarURL: avatarURL,
 		},
 	}, nil
 }

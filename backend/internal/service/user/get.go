@@ -17,7 +17,7 @@ func (s *userService) GetUserByID(ctx context.Context, userID int) (*dto.UserRes
 		return &dto.UserResponse{}, fmt.Errorf("failed to get user by id: %w", err)
 	}
 
-	avatar, err := s.media.GetAvatarByUserID(ctx, user.ID)
+	avatarUrl, err := s.media.GetAvatarUrlByUserID(ctx, user.ID)
 	if err != nil {
 		return &dto.UserResponse{}, fmt.Errorf("failed to get avatar by user id: %w", err)
 	}
@@ -29,11 +29,7 @@ func (s *userService) GetUserByID(ctx context.Context, userID int) (*dto.UserRes
 		Gen:       user.Gen,
 		Email:     user.Email,
 		CreatedAt: user.CreatedAt,
-		Avatar: dto.Avatar{
-			MediaURL:  avatar.MediaURL,
-			MimeType:  avatar.MimeType,
-			SizeBytes: avatar.SizeBytes,
-		},
+		AvatarURL: avatarUrl,
 	}, nil
 }
 
@@ -46,7 +42,7 @@ func (s *userService) GetUserByUsername(ctx context.Context, username string) (*
 		return &dto.UserResponse{}, fmt.Errorf("failed to get user by id: %w", err)
 	}
 
-	avatar, err := s.media.GetAvatarByUserID(ctx, user.ID)
+	avatarURL, err := s.media.GetAvatarUrlByUserID(ctx, user.ID)
 	if err != nil {
 		return &dto.UserResponse{}, fmt.Errorf("failed to get avatar by user id: %w", err)
 	}
@@ -58,10 +54,6 @@ func (s *userService) GetUserByUsername(ctx context.Context, username string) (*
 		Gen:       user.Gen,
 		Email:     user.Email,
 		CreatedAt: user.CreatedAt,
-		Avatar: dto.Avatar{
-			MediaURL:  avatar.MediaURL,
-			MimeType:  avatar.MimeType,
-			SizeBytes: avatar.SizeBytes,
-		},
+		AvatarURL: avatarURL,
 	}, nil
 }

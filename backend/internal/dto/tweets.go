@@ -14,7 +14,7 @@ type TweetResponse struct {
 	CreatedAt     time.Time         `json:"created_at"`
 	UpdatedAt     time.Time         `json:"updated_at"`
 	ParentTweetID *int              `json:"parent_tweet_id,omitempty"`
-	Media         TweetMedia        `json:"media,omitempty"`
+	MediaURL      string            `json:"media_url,omitempty"`
 	Author        SmallUserResponse `json:"author"`
 }
 
@@ -37,7 +37,7 @@ type UpdateTweetResponse struct {
 }
 
 type UserLikeResponse struct {
-	UserID   int    `json:"user_id" db:"user_id"`
-	Username string `json:"username" db:"username"`
-	Avatar   Avatar `json:"avatar" db:"avatar"`
+	UserID    int    `json:"user_id" db:"user_id"`
+	Username  string `json:"username" db:"username"`
+	AvatarURL string `json:"avatar_url" db:"avatar"`
 }

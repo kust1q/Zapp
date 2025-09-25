@@ -45,6 +45,7 @@ func Get() *config {
 				User:       viper.GetString("minio.user"),
 				Password:   viper.GetString("minio.password"),
 				UseSSL:     viper.GetBool("minio.sslmode"),
+				TTL:        viper.GetDuration("minio.ttl"),
 			},
 			Redis: RedisConfig{
 				Host:     viper.GetString("redis.host"),
@@ -113,6 +114,9 @@ func (c *config) Validate() error {
 	}
 	if minio.Password == "" {
 		allErrs = append(allErrs, "minio: password is required")
+	}
+	if minio.TTL <= 0 {
+		allErrs = append(allErrs, "minio: ttl is required")
 	}
 
 	redis := c.Redis

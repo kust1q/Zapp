@@ -29,7 +29,7 @@ func (s *userService) GetUserProfile(ctx context.Context, username string) (*dto
 	if err != nil {
 		return &dto.UserProfileResponse{}, fmt.Errorf("failed to get user by user id: %w", err)
 	}
-	avatar, err := s.media.GetAvatarByUserID(ctx, user.ID)
+	avatarURL, err := s.media.GetAvatarUrlByUserID(ctx, user.ID)
 	if err != nil {
 		return &dto.UserProfileResponse{}, fmt.Errorf("failed to get avatar by user id: %w", err)
 	}
@@ -42,7 +42,7 @@ func (s *userService) GetUserProfile(ctx context.Context, username string) (*dto
 
 	tweetsRes := make([]dto.TweetResponse, 0, len(tweets))
 	for _, t := range tweets {
-		tr, err := s.tweetResponseByTweet(ctx, &t, user, avatar)
+		tr, err := s.tweetResponseByTweet(ctx, &t, user, avatarURL)
 		if err != nil {
 			return &dto.UserProfileResponse{}, fmt.Errorf("failed to get tweet responses by tweet: %w", err)
 		}
@@ -56,33 +56,16 @@ func (s *userService) GetUserProfile(ctx context.Context, username string) (*dto
 			Gen:       user.Gen,
 			Email:     user.Email,
 			CreatedAt: user.CreatedAt,
-			Avatar: dto.Avatar{
-				MediaURL:  avatar.MediaURL,
-				MimeType:  avatar.MimeType,
-				SizeBytes: avatar.SizeBytes,
-			},
+			AvatarURL: avatarURL,
 		},
 		Tweets: tweetsRes,
 	}, nil
 }
 
-func (s *userService) tweetResponseByTweet(ctx context.Context, tweet *entity.Tweet, author *entity.User, avatar *dto.Avatar) (*dto.TweetResponse, error) {
-	var m dto.TweetMedia
-	media, err := s.media.GetMediaByTweetID(ctx, tweet.ID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			m = dto.TweetMedia{}
-		} else {
-			return &dto.TweetResponse{}, fmt.Errorf("failed to get tweet by id: %w", err)
-		}
-	} else {
-		m = dto.TweetMedia{
-			ID:        media.ID,
-			TweetID:   media.TweetID,
-			MediaURL:  media.MediaURL,
-			MimeType:  media.MimeType,
-			SizeBytes: media.SizeBytes,
-		}
+func (s *userService) tweetResponseByTweet(ctx context.Context, tweet *entity.Tweet, author *entity.User, avatarURL string) (*dto.TweetResponse, error) {
+	mediaURL, err := s.media.GetMediaUrlByTweetID(ctx, tweet.ID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return &dto.TweetResponse{}, fmt.Errorf("failed to get tweet by id: %w", err)
 	}
 
 	return &dto.TweetResponse{
@@ -91,15 +74,11 @@ func (s *userService) tweetResponseByTweet(ctx context.Context, tweet *entity.Tw
 		CreatedAt:     tweet.CreatedAt,
 		UpdatedAt:     tweet.UpdatedAt,
 		ParentTweetID: &tweet.ParentTweetID,
-		Media:         m,
+		MediaURL:      mediaURL,
 		Author: dto.SmallUserResponse{
-			ID:       author.ID,
-			Username: author.Username,
-			Avatar: dto.Avatar{
-				MediaURL:  avatar.MediaURL,
-				MimeType:  avatar.MimeType,
-				SizeBytes: avatar.SizeBytes,
-			},
+			ID:        author.ID,
+			Username:  author.Username,
+			AvatarURL: avatarURL,
 		},
 	}, nil
 }

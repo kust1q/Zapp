@@ -32,17 +32,16 @@ type tweetStorage interface {
 }
 
 type mediaService interface {
-	UploadAndAttachTweetMediaTx(ctx context.Context, tweetID int, file io.Reader, filename string, tx *sql.Tx) (*dto.TweetMedia, error)
-	GetMediaByTweetID(ctx context.Context, tweetID int) (*dto.TweetMedia, error)
-	GetAvatarByUserID(ctx context.Context, userID int) (*dto.Avatar, error)
-	DeleteTweetMedia(ctx context.Context, tweetID int) error
+	UploadAndAttachTweetMediaTx(ctx context.Context, tweetID int, file io.Reader, filename string, tx *sql.Tx) (string, error)
+	GetMediaUrlByTweetID(ctx context.Context, tweetID int) (string, error)
+	GetAvatarUrlByUserID(ctx context.Context, userID int) (string, error)
+	DeleteTweetMedia(ctx context.Context, tweetID, userID int) error
 }
 
 var (
 	ErrTweetNotFound      = errors.New("tweet not found")
 	ErrUserNotFound       = errors.New("user not found ")
 	ErrUnauthorizedUpdate = errors.New("user is not authorized to update this tweet")
-	ErrNotEnoughRights    = errors.New("not enough rights to do it")
 )
 
 type tweetService struct {
@@ -58,22 +57,9 @@ func NewTweetService(storage tweetStorage, media mediaService) *tweetService {
 }
 
 func (s *tweetService) tweetResponseByTweet(ctx context.Context, tweet *entity.Tweet) (*dto.TweetResponse, error) {
-	var m dto.TweetMedia
-	media, err := s.media.GetMediaByTweetID(ctx, tweet.ID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			m = dto.TweetMedia{}
-		} else {
-			return &dto.TweetResponse{}, fmt.Errorf("failed to get tweet by id: %w", err)
-		}
-	} else {
-		m = dto.TweetMedia{
-			ID:        media.ID,
-			TweetID:   media.TweetID,
-			MediaURL:  media.MediaURL,
-			MimeType:  media.MimeType,
-			SizeBytes: media.SizeBytes,
-		}
+	mediaURL, err := s.media.GetMediaUrlByTweetID(ctx, tweet.ID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return &dto.TweetResponse{}, fmt.Errorf("failed to get tweet by id: %w", err)
 	}
 
 	author, err := s.storage.GetUserByID(ctx, tweet.UserID)
@@ -81,7 +67,7 @@ func (s *tweetService) tweetResponseByTweet(ctx context.Context, tweet *entity.T
 		return &dto.TweetResponse{}, fmt.Errorf("failed to get tweet author")
 	}
 
-	avatar, err := s.media.GetAvatarByUserID(ctx, tweet.UserID)
+	avatarURL, err := s.media.GetAvatarUrlByUserID(ctx, tweet.UserID)
 	if err != nil {
 		return &dto.TweetResponse{}, fmt.Errorf("failed to get user avatar")
 	}
@@ -92,36 +78,19 @@ func (s *tweetService) tweetResponseByTweet(ctx context.Context, tweet *entity.T
 		CreatedAt:     tweet.CreatedAt,
 		UpdatedAt:     tweet.UpdatedAt,
 		ParentTweetID: &tweet.ParentTweetID,
-		Media:         m,
+		MediaURL:      mediaURL,
 		Author: dto.SmallUserResponse{
-			ID:       author.ID,
-			Username: author.Username,
-			Avatar: dto.Avatar{
-				MediaURL:  avatar.MediaURL,
-				MimeType:  avatar.MimeType,
-				SizeBytes: avatar.SizeBytes,
-			},
+			ID:        author.ID,
+			Username:  author.Username,
+			AvatarURL: avatarURL,
 		},
 	}, nil
 }
 
 func (s *tweetService) tweetResponseWithCountersByTweet(ctx context.Context, tweet *entity.Tweet) (*dto.TweetResponseWithCounters, error) {
-	var m dto.TweetMedia
-	media, err := s.media.GetMediaByTweetID(ctx, tweet.ID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			m = dto.TweetMedia{}
-		} else {
-			return &dto.TweetResponseWithCounters{}, fmt.Errorf("failed to get tweet by id: %w", err)
-		}
-	} else {
-		m = dto.TweetMedia{
-			ID:        media.ID,
-			TweetID:   media.TweetID,
-			MediaURL:  media.MediaURL,
-			MimeType:  media.MimeType,
-			SizeBytes: media.SizeBytes,
-		}
+	mediaURL, err := s.media.GetMediaUrlByTweetID(ctx, tweet.ID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return &dto.TweetResponseWithCounters{}, fmt.Errorf("failed to get tweet by id: %w", err)
 	}
 
 	author, err := s.storage.GetUserByID(ctx, tweet.UserID)
@@ -129,7 +98,7 @@ func (s *tweetService) tweetResponseWithCountersByTweet(ctx context.Context, twe
 		return &dto.TweetResponseWithCounters{}, fmt.Errorf("failed to get tweet author")
 	}
 
-	avatar, err := s.media.GetAvatarByUserID(ctx, tweet.UserID)
+	avatarURL, err := s.media.GetAvatarUrlByUserID(ctx, tweet.UserID)
 	if err != nil {
 		return &dto.TweetResponseWithCounters{}, fmt.Errorf("failed to get user avatar")
 	}
@@ -146,15 +115,11 @@ func (s *tweetService) tweetResponseWithCountersByTweet(ctx context.Context, twe
 			CreatedAt:     tweet.CreatedAt,
 			UpdatedAt:     tweet.UpdatedAt,
 			ParentTweetID: &tweet.ParentTweetID,
-			Media:         m,
+			MediaURL:      mediaURL,
 			Author: dto.SmallUserResponse{
-				ID:       author.ID,
-				Username: author.Username,
-				Avatar: dto.Avatar{
-					MediaURL:  avatar.MediaURL,
-					MimeType:  avatar.MimeType,
-					SizeBytes: avatar.SizeBytes,
-				},
+				ID:        author.ID,
+				Username:  author.Username,
+				AvatarURL: avatarURL,
 			},
 		},
 		ReplyCount:   replyCount,

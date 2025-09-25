@@ -26,3 +26,8 @@ type SecretQuestion struct {
 	SecretQuestion string `db:"question"`
 	Answer         string `db:"answer"`
 }
+
+type UserLike struct {
+	UserID   int    `db:"user_id"`
+	Username string `db:"username"`
+}

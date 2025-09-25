@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
-	"github.com/kust1q/Zapp/backend/internal/dto"
 )
 
 var (
@@ -53,7 +52,8 @@ type tokenStorage interface {
 }
 
 type mediaService interface {
-	UploadAvatarTx(ctx context.Context, userID int, file io.Reader, filename string, tx *sql.Tx) (*dto.Avatar, error)
+	UploadAvatarTx(ctx context.Context, userID int, file io.Reader, filename string, tx *sql.Tx) (*entity.Avatar, error)
+	GetPresignedURL(ctx context.Context, objectPath string) (string, error)
 }
 
 type AuthServiceConfig struct {

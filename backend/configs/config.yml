@@ -15,7 +15,8 @@ minio:
   user: ${MINIO_USER}
   password: ${MINIO_PASSWORD}
   sslmode: false
-  bucketname: "images"
+  bucketname: "objects"
+  ttl: 24h
 
 redis:
   host: "localhost"

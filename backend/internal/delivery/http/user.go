@@ -149,8 +149,8 @@ func (h *Handler) followUser(c *gin.Context) {
 
 	followingID, err := strconv.Atoi(c.Param("user_id"))
 	if err != nil || followingID == 0 {
-		logrus.WithError(err).Error("failed follow - invalid userID")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid userID"})
+		logrus.WithError(err).Error("failed follow - invalid user id")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
 		return
 	}
 
@@ -184,8 +184,8 @@ func (h *Handler) unfollowUser(c *gin.Context) {
 
 	followingID, err := strconv.Atoi(c.Param("user_id"))
 	if err != nil || followingID == 0 {
-		logrus.WithError(err).Error("failed unfollow - invalid userID")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid userID"})
+		logrus.WithError(err).Error("failed unfollow - invalid user id")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
 		return
 	}
 

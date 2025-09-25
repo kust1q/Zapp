@@ -39,6 +39,7 @@ type ObjectStorageConfig struct {
 	Endpoint   string
 	BucketName string
 	UseSSL     bool
+	TTL        time.Duration
 }
 
 type objectStorage struct {
@@ -112,6 +113,14 @@ func (s *objectStorage) Remove(ctx context.Context, objectPath string) error {
 		objectPath,
 		minio.RemoveObjectOptions{},
 	)
+}
+
+func (s *objectStorage) GetPresignedURL(ctx context.Context, objectPath string) (string, error) {
+	url, err := s.mc.PresignedGetObject(ctx, s.cfg.BucketName, objectPath, s.cfg.TTL, nil)
+	if err != nil {
+		return "", err
+	}
+	return url.String(), nil
 }
 
 func (s *objectStorage) readAndValidate(reader io.Reader, ext string, cfg MediaTypeConfig) ([]byte, error) {

@@ -64,7 +64,17 @@ func (s *authService) SignUp(ctx context.Context, user *dto.SignUpRequest) (*dto
 	if err := s.storage.SetSecretQuestionTx(ctx, tx, &entity.SecretQuestion{UserID: createdUser.ID, SecretQuestion: user.SecretQuestion, Answer: string(hashedAnswer)}); err != nil {
 		return &dto.SignUpResponse{}, fmt.Errorf("set secret question failed: %w", err)
 	}
+
 	avatar, err := s.generateAndUploadAvatar(ctx, createdUser.ID, createdUser.Username, createdUser.Gen, tx)
+
+	if err != nil {
+		return &dto.SignUpResponse{}, fmt.Errorf("failed to generate or upload avatar: %w", err)
+	}
+
+	avatarURL, err := s.media.GetPresignedURL(ctx, avatar.Path)
+	if err != nil {
+		return &dto.SignUpResponse{}, fmt.Errorf("get avatar presigned url failed: %w", err)
+	}
 
 	if err := tx.Commit(); err != nil {
 		return &dto.SignUpResponse{}, fmt.Errorf("commit transaction failed: %w", err)
@@ -89,24 +99,24 @@ func (s *authService) SignUp(ctx context.Context, user *dto.SignUpRequest) (*dto
 		Email:     createdUser.Email,
 		Bio:       createdUser.Bio,
 		Gen:       createdUser.Gen,
-		Avatar:    *avatar,
+		AvatarURL: avatarURL,
 		CreatedAt: createdUser.CreatedAt,
 	}, nil
 }
 
-func (s *authService) generateAndUploadAvatar(ctx context.Context, userID int, username, gender string, tx *sql.Tx) (*dto.Avatar, error) {
+func (s *authService) generateAndUploadAvatar(ctx context.Context, userID int, username, gender string, tx *sql.Tx) (*entity.Avatar, error) {
 	genMap := map[string]govatar.Gender{
 		"male":   govatar.MALE,
 		"female": govatar.FEMALE,
 	}
 	gen, ok := genMap[strings.ToLower(gender)]
 	if !ok {
-		return &dto.Avatar{}, ErrInvalidGender
+		return &entity.Avatar{}, ErrInvalidGender
 	}
 
 	img, err := govatar.GenerateForUsername(gen, username)
 	if err != nil {
-		return &dto.Avatar{}, fmt.Errorf("avatar generation failed: %w", err)
+		return &entity.Avatar{}, fmt.Errorf("avatar generation failed: %w", err)
 	}
 	/*
 		var avatarBuffer bytes.Buffer
@@ -116,18 +126,18 @@ func (s *authService) generateAndUploadAvatar(ctx context.Context, userID int, u
 	*/
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80}); err != nil {
-		return &dto.Avatar{}, fmt.Errorf("JPEG encoding failed: %w", err)
+		return &entity.Avatar{}, fmt.Errorf("JPEG encoding failed: %w", err)
 	}
 	avatarSaveName := uuid.New().String() + ".jpg"
 
 	avatar, err := s.media.UploadAvatarTx(ctx, userID, &buf, avatarSaveName, tx)
 	if err != nil {
-		return &dto.Avatar{}, fmt.Errorf("avatar upload failed: %w", err)
+		return &entity.Avatar{}, fmt.Errorf("avatar upload failed: %w", err)
 	}
-	return &dto.Avatar{
+	return &entity.Avatar{
 		ID:        avatar.ID,
 		UserID:    avatar.UserID,
-		MediaURL:  avatar.MediaURL,
+		Path:      avatar.Path,
 		MimeType:  avatar.MimeType,
 		SizeBytes: avatar.SizeBytes,
 	}, nil

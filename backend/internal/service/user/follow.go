@@ -36,18 +36,14 @@ func (s *userService) GetFollowers(ctx context.Context, username string) ([]dto.
 		if err != nil {
 			return nil, fmt.Errorf("failed to get user by id: %w", err)
 		}
-		avatar, err := s.media.GetAvatarByUserID(ctx, id)
+		avatarURL, err := s.media.GetAvatarUrlByUserID(ctx, id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get avatar")
 		}
 		users = append(users, dto.SmallUserResponse{
-			ID:       user.ID,
-			Username: user.Username,
-			Avatar: dto.Avatar{
-				MediaURL:  avatar.MediaURL,
-				MimeType:  avatar.MimeType,
-				SizeBytes: avatar.SizeBytes,
-			},
+			ID:        user.ID,
+			Username:  user.Username,
+			AvatarURL: avatarURL,
 		})
 	}
 	return users, nil
@@ -66,18 +62,14 @@ func (s *userService) GetFollowings(ctx context.Context, username string) ([]dto
 		if err != nil {
 			return nil, fmt.Errorf("failed to get user by id: %w", err)
 		}
-		avatar, err := s.media.GetAvatarByUserID(ctx, id)
+		avatarUrl, err := s.media.GetAvatarUrlByUserID(ctx, id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get avatar")
 		}
 		users = append(users, dto.SmallUserResponse{
-			ID:       user.ID,
-			Username: user.Username,
-			Avatar: dto.Avatar{
-				MediaURL:  avatar.MediaURL,
-				MimeType:  avatar.MimeType,
-				SizeBytes: avatar.SizeBytes,
-			},
+			ID:        user.ID,
+			Username:  user.Username,
+			AvatarURL: avatarUrl,
 		})
 	}
 	return users, nil

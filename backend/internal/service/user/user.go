@@ -23,10 +23,10 @@ type dataStorage interface {
 }
 
 type mediaService interface {
-	GetAvatarByUserID(ctx context.Context, userID int) (*dto.Avatar, error)
+	GetAvatarUrlByUserID(ctx context.Context, userID int) (string, error)
 	DeleteAvatar(ctx context.Context, userID int) error
 
-	GetMediaByTweetID(ctx context.Context, tweetID int) (*dto.TweetMedia, error)
+	GetMediaUrlByTweetID(ctx context.Context, tweetID int) (string, error)
 }
 
 type userService struct {
