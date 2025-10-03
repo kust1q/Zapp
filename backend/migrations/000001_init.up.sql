@@ -61,16 +61,21 @@ CREATE TABLE IF NOT EXISTS secret_questions (
     answer VARCHAR(100) NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_tweets_user_created_at ON tweets(user_id, created_at DESC);
-
+CREATE INDEX IF NOT EXISTS idx_tweets_user_id_created_at ON tweets(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tweets_parent_created_at ON tweets (parent_tweet_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tweets_parent ON tweets(parent_tweet_id);
-
-CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
-
-CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);
-
+CREATE INDEX IF NOT EXISTS idx_tweets_user_id ON tweets(user_id);
 CREATE INDEX IF NOT EXISTS idx_likes_tweet ON likes(tweet_id);
-
 CREATE INDEX IF NOT EXISTS idx_retweets_tweet ON retweets(tweet_id);
-
+CREATE INDEX IF NOT EXISTS idx_retweets_user_id ON retweets(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uidx_media_tweet ON tweet_media(tweet_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uidx_avatar_user_id ON avatars(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uidx_tweets_id ON tweets(id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_id ON users(id);
+CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
+CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_tweets_content ON tweets
+USING gin(to_tsvector('english', content));
+CREATE INDEX IF NOT EXISTS idx_users_username_bio ON users
+USING gin(to_tsvector('english', username || ' ' || coalesce(bio, '')));

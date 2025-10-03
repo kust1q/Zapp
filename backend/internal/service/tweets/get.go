@@ -31,14 +31,14 @@ func (s *tweetService) GetTweetsAndRetweetsByUsername(ctx context.Context, usern
 		if errors.Is(err, sql.ErrNoRows) {
 			return []dto.TweetResponse{}, nil
 		}
-		return []dto.TweetResponse{}, fmt.Errorf("failed to get tweets by username: %w", err)
+		return nil, fmt.Errorf("failed to get tweets by username: %w", err)
 	}
 
 	res := make([]dto.TweetResponse, 0, len(tweets))
 	for _, t := range tweets {
-		tr, err := s.tweetResponseByTweet(ctx, &t)
+		tr, err := s.TweetResponseByTweet(ctx, &t)
 		if err != nil {
-			return []dto.TweetResponse{}, fmt.Errorf("failed to get tweet responses by username: %w", err)
+			return nil, fmt.Errorf("failed to get tweet responses by username: %w", err)
 		}
 		res = append(res, *tr)
 	}

@@ -52,6 +52,7 @@ type SearchService interface {
 }
 
 type FeedService interface {
+	GetUserFeedByUserId(ctx context.Context, userID int) ([]dto.TweetResponse, error)
 }
 
 type MediaService interface {
@@ -111,12 +112,13 @@ func (h *Handler) InitRouters() *gin.Engine {
 		public.GET("/tweets/:tweet_id/replies", h.getReplies)
 		public.GET("/tweets/:tweet_id/likes", h.getLikes)
 		public.GET("/tweets/media/:tweet_id", h.getTweetMedia)
+		public.GET("tweets/search", h.searchTweets)
 		public.GET("/users/:username/profile", h.getUserProfile)
 		public.GET("/users/:username/tweets", h.getTweetsAndRetweetsByUsername)
 		public.GET("/users/:username/followers", h.followers)
 		public.GET("/users/:username/following", h.following)
 		public.GET("/users/avatar/:user_id", h.getAvatar)
-		public.GET("/search", h.search)
+		public.GET("users/search", h.searchUsers)
 	}
 
 	protected := api.Group("/protected", h.authMiddleware)
@@ -150,12 +152,7 @@ func (h *Handler) InitRouters() *gin.Engine {
 			users.DELETE("/:user_id/follow", h.unfollowUser)
 		}
 
-		feed := protected.Group("/feed")
-		{
-			feed.GET("/", h.getFeed)
-			feed.GET("/explore", h.exploreFeed)
-			feed.GET("/trends", h.trendsFeed)
-		}
+		protected.GET("/feed", h.getFeed)
 	}
 
 	router.GET("/health", func(c *gin.Context) {

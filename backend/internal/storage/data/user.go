@@ -123,7 +123,7 @@ func (s *dataStorage) UserExistsByUsername(ctx context.Context, username string)
 }
 
 func (s *dataStorage) FollowToUser(ctx context.Context, followerID, followingID int, createdAt time.Time) (*dto.FollowResponse, error) {
-	query := fmt.Sprintf("INSERT INTO %s (follower_id, following_id, created_at) VALUES ($1, $2, $3)", postgres.FollowsTable)
+	query := fmt.Sprintf("INSERT INTO %s (follower_id, following_id, created_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", postgres.FollowsTable)
 	_, err := s.db.ExecContext(ctx, query, followerID, followingID, createdAt)
 	if err != nil {
 		return &dto.FollowResponse{}, nil

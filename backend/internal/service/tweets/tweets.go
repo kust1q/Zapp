@@ -56,7 +56,7 @@ func NewTweetService(storage tweetStorage, media mediaService) *tweetService {
 	}
 }
 
-func (s *tweetService) tweetResponseByTweet(ctx context.Context, tweet *entity.Tweet) (*dto.TweetResponse, error) {
+func (s *tweetService) TweetResponseByTweet(ctx context.Context, tweet *entity.Tweet) (*dto.TweetResponse, error) {
 	mediaURL, err := s.media.GetMediaUrlByTweetID(ctx, tweet.ID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return &dto.TweetResponse{}, fmt.Errorf("failed to get tweet by id: %w", err)

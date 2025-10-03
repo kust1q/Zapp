@@ -113,9 +113,9 @@ func (s *tweetService) GetRepliesToTweet(ctx context.Context, tweetID int) ([]dt
 
 	res := make([]dto.TweetResponse, 0, len(replies))
 	for _, r := range replies {
-		tr, err := s.tweetResponseByTweet(ctx, &r)
+		tr, err := s.TweetResponseByTweet(ctx, &r)
 		if err != nil {
-			return []dto.TweetResponse{}, fmt.Errorf("failed to get tweet responses by username: %w", err)
+			return nil, fmt.Errorf("failed to change tweet entity to response: %w", err)
 		}
 		res = append(res, *tr)
 	}

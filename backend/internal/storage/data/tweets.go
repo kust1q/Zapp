@@ -32,7 +32,7 @@ func (s *dataStorage) CreateTweetTx(ctx context.Context, tx *sql.Tx, tweet *enti
 }
 
 func (s *dataStorage) GetTweetById(ctx context.Context, tweetID int) (*entity.Tweet, error) {
-	query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1 AND user_id = $2", postgres.TweetsTable)
+	query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1", postgres.TweetsTable)
 	var tweet entity.Tweet
 	err := s.db.GetContext(ctx, &tweet, query, tweetID)
 	return &tweet, err
