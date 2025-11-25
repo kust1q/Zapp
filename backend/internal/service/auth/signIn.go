@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/kust1q/Zapp/backend/internal/dto"
+	"github.com/kust1q/Zapp/backend/internal/domain/entity"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -23,23 +23,23 @@ type AccessClaims struct {
 	jwt.RegisteredClaims
 }
 
-func (s *authService) SignIn(ctx context.Context, credential *dto.SignInRequest) (*dto.SignInResponse, error) {
+func (s *authService) SignIn(ctx context.Context, req *entity.Credential) (*entity.Tokens, error) {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	credential.Email = strings.ToLower(strings.TrimSpace(credential.Email))
-	credential.Password = strings.TrimSpace(credential.Password)
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	req.Password = strings.TrimSpace(req.Password)
 
-	user, err := s.storage.GetUserByEmail(ctx, credential.Email)
+	user, err := s.db.GetUserByEmail(ctx, req.Email)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return &dto.SignInResponse{}, ErrInvalidCredentials
+			return nil, ErrInvalidCredentials
 		}
-		return &dto.SignInResponse{}, fmt.Errorf("failed to find user: %w", err)
+		return nil, fmt.Errorf("failed to find user: %w", err)
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(credential.Password)); err != nil {
-		return &dto.SignInResponse{}, ErrInvalidCredentials
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Credential.Password), []byte(req.Password)); err != nil {
+		return nil, ErrInvalidCredentials
 	}
 
 	role := "user"
@@ -47,19 +47,23 @@ func (s *authService) SignIn(ctx context.Context, credential *dto.SignInRequest)
 		role = "admin"
 	}
 
-	accessToken, err := s.generateAccessToken(user.ID, user.Email, role)
+	accessToken, err := s.generateAccessToken(user.ID, user.Credential.Email, role)
 	if err != nil {
-		return &dto.SignInResponse{}, fmt.Errorf("failed to generate access token: %w", err)
+		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
 	refreshToken, err := s.generateRefreshToken(ctx, strconv.Itoa(user.ID))
 	if err != nil {
-		return &dto.SignInResponse{}, fmt.Errorf("failed to generate refresh token: %w", err)
+		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
 
-	return &dto.SignInResponse{
-		Access:  accessToken,
-		Refresh: refreshToken,
+	return &entity.Tokens{
+		Access: &entity.Access{
+			Access: accessToken,
+		},
+		Refresh: &entity.Refresh{
+			Refresh: refreshToken,
+		},
 	}, nil
 }
 
@@ -84,7 +88,7 @@ func (s *authService) generateRefreshToken(ctx context.Context, userID string) (
 		return "", fmt.Errorf("failed to generate token: %w", err)
 	}
 	refreshToken := base64.RawURLEncoding.EncodeToString(tokenBytes)
-	if err := s.tokens.Store(ctx, refreshToken, userID, s.cfg.RefreshTTL); err != nil {
+	if err := s.tokens.StoreRefresh(ctx, refreshToken, userID, s.cfg.RefreshTTL); err != nil {
 		return "", fmt.Errorf("failed to store refresh token: %w", err)
 	}
 

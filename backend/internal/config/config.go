@@ -1,11 +1,14 @@
 package config
 
 import (
+	"crypto/rsa"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -16,6 +19,7 @@ type config struct {
 	Minio    MinioConfig
 	Redis    RedisConfig
 	Cache    CacheConfig
+	Tokens   TokensConfig
 	JWT      JWTConfig
 }
 
@@ -25,6 +29,11 @@ var (
 )
 
 func Get() *config {
+	privateKey, publicKey, err := loadRSAKeys(viper.GetString("jwt.private"), viper.GetString("jwt.public"))
+	if err != nil {
+		logrus.Fatalf("Failed to load RSA keys: %v", err)
+	}
+
 	once.Do(func() {
 		instance = &config{
 			App: ApplicationConfig{
@@ -57,11 +66,14 @@ func Get() *config {
 				HashSecret: viper.GetString("cache.secret"),
 				TTL:        viper.GetDuration("cache.ttl"),
 			},
+			Tokens: TokensConfig{
+				AccessTTL:   viper.GetDuration("tokens.accessTTL"),
+				RefreshTTL:  viper.GetDuration("tokens.refreshTTL"),
+				RecoveryTTL: viper.GetDuration("tokens.recoveryTTL"),
+			},
 			JWT: JWTConfig{
-				AccessTTL:      viper.GetDuration("jwt.accessTTL"),
-				RefreshTTL:     viper.GetDuration("jwt.refreshTTL"),
-				PrivateKeyPath: viper.GetString("jwt.private"),
-				PublicKeyPath:  viper.GetString("jwt.public"),
+				PrivateKey: privateKey,
+				PublicKey:  publicKey,
 			},
 		}
 	})
@@ -137,19 +149,21 @@ func (c *config) Validate() error {
 		allErrs = append(allErrs, "hash: ttl must be > 0")
 	}
 
-	if c.JWT.AccessTTL <= 0 {
-		allErrs = append(allErrs, "jwt: access ttl must be > 0")
+	if c.Tokens.AccessTTL <= 0 {
+		allErrs = append(allErrs, "tokens: access ttl must be > 0")
 	}
-	if c.JWT.RefreshTTL <= 0 {
-		allErrs = append(allErrs, "jwt: refresh ttl must be > 0")
+	if c.Tokens.RefreshTTL <= 0 {
+		allErrs = append(allErrs, "tokens: refresh ttl must be > 0")
 	}
-	if c.JWT.PrivateKeyPath == "" {
+	if c.Tokens.RecoveryTTL <= 0 {
+		allErrs = append(allErrs, "tokens: recovery ttl must be > 0")
+	}
+	if c.JWT.PrivateKey == nil {
 		allErrs = append(allErrs, "jwt: private key path is required")
 	}
-	if c.JWT.PublicKeyPath == "" {
+	if c.JWT.PublicKey == nil {
 		allErrs = append(allErrs, "jwt: public key path is required")
 	}
-
 	if len(allErrs) > 0 {
 		return errors.New("config validation errors:\n  • " + strings.Join(allErrs, "\n  • "))
 	}
@@ -173,4 +187,28 @@ func InitConfig() error {
 
 	return nil
 
+}
+
+func loadRSAKeys(privateKeyPath, publicKeyPath string) (*rsa.PrivateKey, *rsa.PublicKey, error) {
+	privatePEM, err := os.ReadFile(privateKeyPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read private key: %w", err)
+	}
+
+	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(privatePEM)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse private key: %w", err)
+	}
+
+	publicPEM, err := os.ReadFile(publicKeyPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read public key: %w", err)
+	}
+
+	publicKey, err := jwt.ParseRSAPublicKeyFromPEM(publicPEM)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse public key: %w", err)
+	}
+
+	return privateKey, publicKey, nil
 }

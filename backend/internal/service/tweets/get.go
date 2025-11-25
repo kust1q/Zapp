@@ -7,40 +7,60 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kust1q/Zapp/backend/internal/dto"
+	"github.com/kust1q/Zapp/backend/internal/domain/entity"
 )
 
-func (s *tweetService) GetTweetById(ctx context.Context, tweetID int) (*dto.TweetResponseWithCounters, error) {
+func (s *tweetService) GetTweetById(ctx context.Context, tweetID int) (*entity.Tweet, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	tweet, err := s.storage.GetTweetById(ctx, tweetID)
+	tweet, err := s.db.GetTweetById(ctx, tweetID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return &dto.TweetResponseWithCounters{}, ErrTweetNotFound
+			return nil, ErrTweetNotFound
 		}
-		return &dto.TweetResponseWithCounters{}, fmt.Errorf("failed to get tweet by id: %w", err)
+		return nil, fmt.Errorf("failed to get tweet by id: %w", err)
 	}
-	return s.tweetResponseWithCountersByTweet(ctx, tweet)
+
+	return s.buildEntityTweetToResponse(ctx, tweet)
 }
 
-func (s *tweetService) GetTweetsAndRetweetsByUsername(ctx context.Context, username string) ([]dto.TweetResponse, error) {
+func (s *tweetService) GetTweetsAndRetweetsByUsername(ctx context.Context, username string) ([]entity.Tweet, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	tweets, err := s.storage.GetTweetsAndRetweetsByUsername(ctx, username)
+	tweets, err := s.db.GetTweetsAndRetweetsByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return []dto.TweetResponse{}, nil
+			return []entity.Tweet{}, nil
 		}
 		return nil, fmt.Errorf("failed to get tweets by username: %w", err)
 	}
 
-	res := make([]dto.TweetResponse, 0, len(tweets))
-	for _, t := range tweets {
-		tr, err := s.TweetResponseByTweet(ctx, &t)
+	//res := make([]entity.Tweet, 0, len(tweets))
+	for i := range tweets {
+		processedTweet, err := s.buildEntityTweetToResponse(ctx, &tweets[i])
 		if err != nil {
-			return nil, fmt.Errorf("failed to get tweet responses by username: %w", err)
+			return nil, err
 		}
-		res = append(res, *tr)
+		tweets[i] = *processedTweet
 	}
-	return res, nil
+	return tweets, nil
+}
+
+func (s *tweetService) GetRepliesToTweet(ctx context.Context, tweetID int) ([]entity.Tweet, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	replies, err := s.db.GetRepliesToTweet(ctx, tweetID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get replies: %w", err)
+	}
+
+	for i := range replies {
+		processedTweet, err := s.buildEntityTweetToResponse(ctx, &replies[i])
+		if err != nil {
+			return nil, err
+		}
+		replies[i] = *processedTweet
+	}
+	return replies, nil
 }

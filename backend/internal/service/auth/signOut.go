@@ -7,19 +7,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kust1q/Zapp/backend/internal/dto"
+	"github.com/kust1q/Zapp/backend/internal/domain/entity"
 	"github.com/sirupsen/logrus"
 )
 
-func (s *authService) SignOut(ctx context.Context, token *dto.RefreshRequest) error {
+func (s *authService) SignOut(ctx context.Context, req *entity.Refresh) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	token.Refresh = strings.TrimSpace(token.Refresh)
+	req.Refresh = strings.TrimSpace(req.Refresh)
 
-	if err := s.tokens.Remove(ctx, token.Refresh); err != nil {
+	if err := s.tokens.RemoveRefresh(ctx, req.Refresh); err != nil {
 		if errors.Is(err, ErrTokenNotFound) {
-			logrus.Debug("refresh token already deleted or expired")
+			logrus.Warn("refresh token already deleted or expired")
 		}
 		return fmt.Errorf("failed to delete refresh token: %w", err)
 	}

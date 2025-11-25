@@ -1,0 +1,31 @@
+package auth
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/kust1q/Zapp/backend/internal/domain/entity"
+)
+
+func (s *authService) RecoveryPassword(ctx context.Context, req *entity.RecoveryPassword) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	req.NewPassword = strings.TrimSpace(req.NewPassword)
+	req.RecoveryToken = strings.TrimSpace(req.RecoveryToken)
+
+	userIDstr, err := s.tokens.GetUserIdByRecoveryToken(ctx, req.RecoveryToken)
+	if err != nil {
+		return fmt.Errorf("failed to get userID: %w", err)
+	}
+
+	userID, err := strconv.Atoi(userIDstr)
+	if err != nil {
+		return fmt.Errorf("failed to get userID: %w", err)
+	}
+
+	return s.db.UpdateUserPassword(ctx, userID, req.NewPassword)
+}

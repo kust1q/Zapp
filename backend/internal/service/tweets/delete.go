@@ -13,5 +13,5 @@ func (s *tweetService) DeleteTweet(ctx context.Context, userID, tweetID int) err
 	if err := s.media.DeleteTweetMedia(ctx, tweetID, userID); err != nil {
 		logrus.WithField("tweet_id", tweetID).Warnf("failed to delete tweet media")
 	}
-	return s.storage.DeleteTweet(ctx, userID, tweetID)
+	return s.db.DeleteTweet(ctx, userID, tweetID)
 }

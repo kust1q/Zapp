@@ -4,30 +4,88 @@ import (
 	"time"
 )
 
-type User struct {
-	ID          int       `db:"id"`
-	Username    string    `db:"username"`
-	Email       string    `db:"email"`
-	Password    string    `db:"password"`
-	Bio         string    `db:"bio"`
-	Gen         string    `db:"gen"`
-	CreatedAt   time.Time `db:"created_at"`
-	IsSuperuser bool      `db:"is_superuser"`
-}
+type (
+	Credential struct {
+		Email    string
+		Password string
+	}
 
-type Follow struct {
-	FollowerID  int       `db:"follower_id"`
-	FollowingID int       `db:"following_id"`
-	CreatedAt   time.Time `db:"created_at"`
-}
+	Refresh struct {
+		Refresh string
+	}
 
-type SecretQuestion struct {
-	UserID         int    `db:"user_id"`
-	SecretQuestion string `db:"question"`
-	Answer         string `db:"answer"`
-}
+	Access struct {
+		Access string
+	}
 
-type UserLike struct {
-	UserID   int    `db:"user_id"`
-	Username string `db:"username"`
-}
+	Recovery struct {
+		Recovery string
+	}
+
+	Tokens struct {
+		Access  *Access
+		Refresh *Refresh
+	}
+
+	UpdatePassword struct {
+		UserID      int
+		OldPassword string
+		NewPassword string
+	}
+
+	ForgotPassword struct {
+		Email string
+	}
+
+	RecoveryPassword struct {
+		RecoveryToken string
+		NewPassword   string
+	}
+
+	User struct {
+		ID          int
+		Username    string
+		Gen         string
+		Bio         string
+		CreatedAt   time.Time
+		IsSuperuser bool
+		IsActive    bool
+		AvatarURL   string
+		Credential  *Credential
+	}
+
+	UserProfile struct {
+		User   *User
+		Tweets []Tweet
+	}
+
+	Follow struct {
+		FollowerID  int
+		FollowingID int
+		CreatedAt   time.Time
+	}
+
+	SecretQuestion struct {
+		UserID         int
+		SecretQuestion string
+		Answer         string
+	}
+
+	SmallUser struct {
+		ID        int
+		Username  string
+		AvatarURL string
+	}
+
+	SecuritySettingsUpdate struct {
+		UserID            int
+		OldSecretAnswer   string
+		NewSecretQuestion string
+		NewSecretAnswer   string
+	}
+
+	UpdateBio struct {
+		UserID int
+		Bio    string
+	}
+)

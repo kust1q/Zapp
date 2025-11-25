@@ -4,23 +4,23 @@ import (
 	"context"
 	"time"
 
-	"github.com/kust1q/Zapp/backend/internal/dto"
+	"github.com/kust1q/Zapp/backend/internal/domain/entity"
 )
 
 func (s *tweetService) LikeTweet(ctx context.Context, userID, tweetID int) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	return s.storage.LikeTweet(ctx, userID, tweetID)
+	return s.db.LikeTweet(ctx, userID, tweetID)
 }
 
 func (s *tweetService) UnlikeTweet(ctx context.Context, userID, tweetID int) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	return s.storage.UnLikeTweet(ctx, userID, tweetID)
+	return s.db.UnLikeTweet(ctx, userID, tweetID)
 }
 
-func (s *tweetService) GetLikes(ctx context.Context, tweetID int) ([]dto.UserLikeResponse, error) {
+func (s *tweetService) GetLikes(ctx context.Context, tweetID int) ([]entity.Like, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	return s.storage.GetLikes(ctx, tweetID)
+	return s.db.GetLikes(ctx, tweetID)
 }

@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     bio VARCHAR(100) DEFAULT '',
     gen VARCHAR(10) DEFAULT 'male' NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE NOT NULL,
     is_superuser BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -55,12 +56,6 @@ CREATE TABLE IF NOT EXISTS retweets (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS secret_questions (
-    user_id INT PRIMARY KEY NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    question VARCHAR(100) NOT NULL,
-    answer VARCHAR(100) NOT NULL
-);
-
 CREATE INDEX IF NOT EXISTS idx_tweets_user_id_created_at ON tweets(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tweets_parent_created_at ON tweets (parent_tweet_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tweets_parent ON tweets(parent_tweet_id);
@@ -75,7 +70,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_id ON users(id);
 CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
 CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
-CREATE INDEX IF NOT EXISTS idx_tweets_content ON tweets
-USING gin(to_tsvector('english', content));
-CREATE INDEX IF NOT EXISTS idx_users_username_bio ON users
-USING gin(to_tsvector('english', username || ' ' || coalesce(bio, '')));

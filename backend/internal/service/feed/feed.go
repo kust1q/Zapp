@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
-	"github.com/kust1q/Zapp/backend/internal/dto"
 )
 
 type userStorage interface {
@@ -18,7 +17,7 @@ type feedStorage interface {
 }
 
 type tweetService interface {
-	TweetResponseByTweet(ctx context.Context, tweet *entity.Tweet) (*dto.TweetResponse, error)
+	TweetResponseByTweet(ctx context.Context, tweet *entity.Tweet) (*entity.Tweet, error)
 }
 
 type feedService struct {
@@ -35,7 +34,7 @@ func NewFeedService(tweets tweetService, users userStorage, feed feedStorage) *f
 	}
 }
 
-func (s *feedService) GetUserFeedByUserId(ctx context.Context, userID int) ([]dto.TweetResponse, error) {
+func (s *feedService) GetUserFeedByUserId(ctx context.Context, userID int) ([]entity.Tweet, error) {
 	user, err := s.users.GetUserByID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by id: %w", err)
@@ -48,7 +47,7 @@ func (s *feedService) GetUserFeedByUserId(ctx context.Context, userID int) ([]dt
 	if err != nil {
 		return nil, fmt.Errorf("failed to get feed by ids: %w", err)
 	}
-	res := make([]dto.TweetResponse, 0, len(feed))
+	res := make([]entity.Tweet, 0, len(feed))
 	for _, t := range feed {
 		tr, err := s.tweets.TweetResponseByTweet(ctx, &t)
 		if err != nil {

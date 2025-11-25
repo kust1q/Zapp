@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
-	"github.com/kust1q/Zapp/backend/internal/dto"
 )
 
 type tweetStorage interface {
@@ -23,10 +22,10 @@ type tweetStorage interface {
 	UnLikeTweet(ctx context.Context, userID, tweetID int) error
 	Retweet(ctx context.Context, userID, tweetID int, createdAt time.Time) error
 	DeleteRetweet(ctx context.Context, userID, retweetID int) error
-	GetRepliesToParentTweet(ctx context.Context, parentTweetID int) ([]entity.Tweet, error)
+	GetRepliesToTweet(ctx context.Context, parentTweetID int) ([]entity.Tweet, error)
 	GetTweetsAndRetweetsByUsername(ctx context.Context, username string) ([]entity.Tweet, error)
 	GetCounts(ctx context.Context, tweetID int) (likes, retweets, replies int, err error)
-	GetLikes(ctx context.Context, tweetID int) ([]dto.UserLikeResponse, error)
+	GetLikes(ctx context.Context, tweetID int) ([]entity.Like, error)
 
 	GetUserByID(ctx context.Context, userID int) (*entity.User, error)
 }
@@ -45,85 +44,54 @@ var (
 )
 
 type tweetService struct {
-	storage tweetStorage
-	media   mediaService
+	db    tweetStorage
+	media mediaService
 }
 
-func NewTweetService(storage tweetStorage, media mediaService) *tweetService {
+func NewTweetService(db tweetStorage, media mediaService) *tweetService {
 	return &tweetService{
-		storage: storage,
-		media:   media,
+		db:    db,
+		media: media,
 	}
 }
 
-func (s *tweetService) TweetResponseByTweet(ctx context.Context, tweet *entity.Tweet) (*dto.TweetResponse, error) {
-	mediaURL, err := s.media.GetMediaUrlByTweetID(ctx, tweet.ID)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return &dto.TweetResponse{}, fmt.Errorf("failed to get tweet by id: %w", err)
-	}
-
-	author, err := s.storage.GetUserByID(ctx, tweet.UserID)
+func (s *tweetService) buildEntityTweetToResponse(ctx context.Context, tweet *entity.Tweet) (*entity.Tweet, error) {
+	mediaUrl, err := s.media.GetMediaUrlByTweetID(ctx, tweet.ID)
 	if err != nil {
-		return &dto.TweetResponse{}, fmt.Errorf("failed to get tweet author")
+		return nil, fmt.Errorf("failed to get tweet media url")
 	}
 
-	avatarURL, err := s.media.GetAvatarUrlByUserID(ctx, tweet.UserID)
+	author, err := s.db.GetUserByID(ctx, tweet.Author.ID)
 	if err != nil {
-		return &dto.TweetResponse{}, fmt.Errorf("failed to get user avatar")
+		return nil, fmt.Errorf("failed to get tweet author: %w", err)
 	}
 
-	return &dto.TweetResponse{
+	avatarUrl, err := s.media.GetAvatarUrlByUserID(ctx, tweet.Author.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user avatar: %w", err)
+	}
+
+	likes, retweets, replies, err := s.db.GetCounts(ctx, tweet.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get counters: %w", err)
+	}
+
+	return &entity.Tweet{
 		ID:            tweet.ID,
+		ParentTweetID: tweet.ParentTweetID,
 		Content:       tweet.Content,
 		CreatedAt:     tweet.CreatedAt,
 		UpdatedAt:     tweet.UpdatedAt,
-		ParentTweetID: &tweet.ParentTweetID,
-		MediaURL:      mediaURL,
-		Author: dto.SmallUserResponse{
+		MediaUrl:      mediaUrl,
+		Author: &entity.SmallUser{
 			ID:        author.ID,
 			Username:  author.Username,
-			AvatarURL: avatarURL,
+			AvatarURL: avatarUrl,
 		},
-	}, nil
-}
-
-func (s *tweetService) tweetResponseWithCountersByTweet(ctx context.Context, tweet *entity.Tweet) (*dto.TweetResponseWithCounters, error) {
-	mediaURL, err := s.media.GetMediaUrlByTweetID(ctx, tweet.ID)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return &dto.TweetResponseWithCounters{}, fmt.Errorf("failed to get tweet by id: %w", err)
-	}
-
-	author, err := s.storage.GetUserByID(ctx, tweet.UserID)
-	if err != nil {
-		return &dto.TweetResponseWithCounters{}, fmt.Errorf("failed to get tweet author")
-	}
-
-	avatarURL, err := s.media.GetAvatarUrlByUserID(ctx, tweet.UserID)
-	if err != nil {
-		return &dto.TweetResponseWithCounters{}, fmt.Errorf("failed to get user avatar")
-	}
-
-	likes, retweets, replyCount, err := s.storage.GetCounts(ctx, tweet.ID)
-	if err != nil {
-		return &dto.TweetResponseWithCounters{}, fmt.Errorf("failed to get user counters")
-	}
-
-	return &dto.TweetResponseWithCounters{
-		TweetResponse: dto.TweetResponse{
-			ID:            tweet.ID,
-			Content:       tweet.Content,
-			CreatedAt:     tweet.CreatedAt,
-			UpdatedAt:     tweet.UpdatedAt,
-			ParentTweetID: &tweet.ParentTweetID,
-			MediaURL:      mediaURL,
-			Author: dto.SmallUserResponse{
-				ID:        author.ID,
-				Username:  author.Username,
-				AvatarURL: avatarURL,
-			},
+		Counters: &entity.Counters{
+			ReplyCount:   replies,
+			RetweetCount: retweets,
+			LikeCount:    likes,
 		},
-		ReplyCount:   replyCount,
-		RetweetCount: retweets,
-		LikeCount:    likes,
 	}, nil
 }

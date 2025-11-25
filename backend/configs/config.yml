@@ -29,7 +29,10 @@ cache:
   ttl: 24h
 
 jwt:
+  privatePath: ${PRIVATE_KEY_PATH}
+  publicPath: ${PUBLIC_KEY_PATH}
+
+tokens:
   accessTTL: 15m
   refreshTTL: 720h
-  private: ${PRIVATE_KEY_PATH}
-  public: ${PUBLIC_KEY_PATH}
+  recoveryTTL: 15m

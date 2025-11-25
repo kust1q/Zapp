@@ -9,57 +9,61 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kust1q/Zapp/backend/internal/dto"
+	"github.com/kust1q/Zapp/backend/internal/domain/entity"
 	"github.com/sirupsen/logrus"
 )
 
-func (s *authService) Refresh(ctx context.Context, token *dto.RefreshRequest) (*dto.SignInResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+func (s *authService) Refresh(ctx context.Context, req *entity.Refresh) (*entity.Tokens, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	token.Refresh = strings.TrimSpace(token.Refresh)
+	req.Refresh = strings.TrimSpace(req.Refresh)
 
-	userID, err := s.tokens.GetUserIdByRefreshToken(ctx, token.Refresh)
+	userID, err := s.tokens.GetUserIdByRefreshToken(ctx, req.Refresh)
 	if err != nil {
 		if errors.Is(err, ErrTokenNotFound) {
-			return &dto.SignInResponse{}, ErrInvalidRefreshToken
+			return nil, ErrInvalidRefreshToken
 		}
-		return &dto.SignInResponse{}, fmt.Errorf("failed to get refresh token: %w", err)
+		return nil, fmt.Errorf("failed to get refresh token: %w", err)
 	}
 
-	if err := s.tokens.Remove(ctx, token.Refresh); err != nil {
+	if err := s.tokens.RemoveRefresh(ctx, req.Refresh); err != nil {
 		logrus.Warnf("failed to delete refresh token: %v", err)
 	}
 
 	userIntID, err := strconv.Atoi(userID)
 	if err != nil {
-		return &dto.SignInResponse{}, fmt.Errorf("invalid user ID format: %w", err)
+		return nil, fmt.Errorf("invalid user ID format: %w", err)
 	}
 
-	user, err := s.storage.GetUserByID(ctx, userIntID)
+	user, err := s.db.GetUserByID(ctx, userIntID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return &dto.SignInResponse{}, ErrUserNotFound
+			return nil, ErrUserNotFound
 		}
-		return &dto.SignInResponse{}, fmt.Errorf("failed to get user: %w", err)
+		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
 	role := "user"
 	if user.IsSuperuser {
 		role = "admin"
 	}
-	accessToken, err := s.generateAccessToken(user.ID, user.Email, role)
+	accessToken, err := s.generateAccessToken(user.ID, user.Credential.Email, role)
 	if err != nil {
-		return &dto.SignInResponse{}, fmt.Errorf("failed to generate access token: %w", err)
+		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
 	refreshToken, err := s.generateRefreshToken(ctx, strconv.Itoa(user.ID))
 	if err != nil {
-		return &dto.SignInResponse{}, fmt.Errorf("failed to generate refresh token: %w", err)
+		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
 
-	return &dto.SignInResponse{
-		Access:  accessToken,
-		Refresh: refreshToken,
+	return &entity.Tokens{
+		Access: &entity.Access{
+			Access: accessToken,
+		},
+		Refresh: &entity.Refresh{
+			Refresh: refreshToken,
+		},
 	}, nil
 }

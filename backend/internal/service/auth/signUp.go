@@ -12,95 +12,89 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
-	"github.com/kust1q/Zapp/backend/internal/dto"
-	"github.com/kust1q/Zapp/backend/internal/storage/cache"
+	"github.com/kust1q/Zapp/backend/internal/providers/db/redis/cache"
 	"github.com/o1egl/govatar"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (s *authService) SignUp(ctx context.Context, user *dto.SignUpRequest) (*dto.SignUpResponse, error) {
+func (s *authService) SignUp(ctx context.Context, req *entity.User) (*entity.User, error) {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	user.Email = strings.ToLower(strings.TrimSpace(user.Email))
-	user.Username = strings.TrimSpace(user.Username)
+	req.Credential.Email = strings.ToLower(strings.TrimSpace(req.Credential.Email))
+	req.Username = strings.TrimSpace(req.Username)
 
-	if err := s.checkUserExists(ctx, user.Email, user.Username); err != nil {
-		return &dto.SignUpResponse{}, err
+	if err := s.checkUserExists(ctx, req.Credential.Email, req.Username); err != nil {
+		return nil, err
 	}
 
-	tx, err := s.storage.BeginTx(ctx)
+	tx, err := s.db.BeginTx(ctx)
 	if err != nil {
-		return &dto.SignUpResponse{}, fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Credential.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return &dto.SignUpResponse{}, fmt.Errorf("password hashing failed: %w", err)
+		return nil, fmt.Errorf("password hashing failed: %w", err)
 	}
 
-	domainUser := entity.User{
-		Username:    user.Username,
-		Email:       user.Email,
-		Password:    string(hashedPassword),
-		Bio:         user.Bio,
-		Gen:         user.Gen,
-		CreatedAt:   time.Now(),
-		IsSuperuser: false,
+	user := entity.User{
+		Username:    req.Username,
+		Bio:         req.Bio,
+		Gen:         req.Gen,
+		CreatedAt:   req.CreatedAt,
+		IsSuperuser: req.IsSuperuser,
+		Credential: &entity.Credential{
+			Email:    req.Credential.Email,
+			Password: string(hashedPassword),
+		},
 	}
 
-	createdUser, err := s.storage.CreateUserTx(ctx, tx, &domainUser)
+	createdUser, err := s.db.CreateUserTx(ctx, tx, &user)
 	if err != nil {
-		return &dto.SignUpResponse{}, fmt.Errorf("user creation failed: %w", err)
-	}
-
-	hashedAnswer, err := bcrypt.GenerateFromPassword([]byte(user.SecretAnswer), bcrypt.DefaultCost)
-	if err != nil {
-		return &dto.SignUpResponse{}, fmt.Errorf("secret answer hashing failed: %w", err)
-	}
-
-	if err := s.storage.SetSecretQuestionTx(ctx, tx, &entity.SecretQuestion{UserID: createdUser.ID, SecretQuestion: user.SecretQuestion, Answer: string(hashedAnswer)}); err != nil {
-		return &dto.SignUpResponse{}, fmt.Errorf("set secret question failed: %w", err)
+		return nil, fmt.Errorf("user creation failed: %w", err)
 	}
 
 	avatar, err := s.generateAndUploadAvatar(ctx, createdUser.ID, createdUser.Username, createdUser.Gen, tx)
 
 	if err != nil {
-		return &dto.SignUpResponse{}, fmt.Errorf("failed to generate or upload avatar: %w", err)
+		return nil, fmt.Errorf("failed to generate or upload avatar: %w", err)
 	}
 
 	avatarURL, err := s.media.GetPresignedURL(ctx, avatar.Path)
 	if err != nil {
-		return &dto.SignUpResponse{}, fmt.Errorf("get avatar presigned url failed: %w", err)
+		return nil, fmt.Errorf("get avatar presigned url failed: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return &dto.SignUpResponse{}, fmt.Errorf("commit transaction failed: %w", err)
+		return nil, fmt.Errorf("commit transaction failed: %w", err)
 	}
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		if err := s.cache.Add(ctx, cache.EmailType, user.Email); err != nil {
-			logrus.Warnf("failed to cache email for user %s: %v", user.Username, err)
+		if err := s.cache.Add(ctx, cache.EmailType, req.Credential.Email); err != nil {
+			logrus.Warnf("failed to cache email for user %s: %v", req.Username, err)
 		}
 
-		if err := s.cache.Add(ctx, cache.UsernameType, user.Username); err != nil {
-			logrus.Warnf("failed to cache username for user %s: %v", user.Username, err)
+		if err := s.cache.Add(ctx, cache.UsernameType, req.Username); err != nil {
+			logrus.Warnf("failed to cache username for user %s: %v", req.Username, err)
 		}
 	}()
 
-	return &dto.SignUpResponse{
+	return &entity.User{
 		ID:        createdUser.ID,
 		Username:  createdUser.Username,
-		Email:     createdUser.Email,
 		Bio:       createdUser.Bio,
 		Gen:       createdUser.Gen,
 		AvatarURL: avatarURL,
 		CreatedAt: createdUser.CreatedAt,
+		Credential: &entity.Credential{
+			Email: createdUser.Credential.Email,
+		},
 	}, nil
 }
 
@@ -111,12 +105,12 @@ func (s *authService) generateAndUploadAvatar(ctx context.Context, userID int, u
 	}
 	gen, ok := genMap[strings.ToLower(gender)]
 	if !ok {
-		return &entity.Avatar{}, ErrInvalidGender
+		return nil, fmt.Errorf("invalid gender")
 	}
 
 	img, err := govatar.GenerateForUsername(gen, username)
 	if err != nil {
-		return &entity.Avatar{}, fmt.Errorf("avatar generation failed: %w", err)
+		return nil, fmt.Errorf("avatar generation failed: %w", err)
 	}
 	/*
 		var avatarBuffer bytes.Buffer
@@ -126,13 +120,13 @@ func (s *authService) generateAndUploadAvatar(ctx context.Context, userID int, u
 	*/
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80}); err != nil {
-		return &entity.Avatar{}, fmt.Errorf("JPEG encoding failed: %w", err)
+		return nil, fmt.Errorf("JPEG encoding failed: %w", err)
 	}
 	avatarSaveName := uuid.New().String() + ".jpg"
 
 	avatar, err := s.media.UploadAvatarTx(ctx, userID, &buf, avatarSaveName, tx)
 	if err != nil {
-		return &entity.Avatar{}, fmt.Errorf("avatar upload failed: %w", err)
+		return nil, fmt.Errorf("avatar upload failed: %w", err)
 	}
 	return &entity.Avatar{
 		ID:        avatar.ID,
@@ -144,7 +138,7 @@ func (s *authService) generateAndUploadAvatar(ctx context.Context, userID int, u
 }
 
 func (s *authService) checkUserExists(ctx context.Context, email, username string) error {
-	_, err := s.storage.GetUserByEmail(ctx, email)
+	_, err := s.db.GetUserByEmail(ctx, email)
 	if err == nil {
 		return ErrEmailAlreadyUsed
 	}
@@ -152,7 +146,7 @@ func (s *authService) checkUserExists(ctx context.Context, email, username strin
 		return fmt.Errorf("email check failed: %w", err)
 	}
 
-	_, err = s.storage.GetUserByUsername(ctx, username)
+	_, err = s.db.GetUserByUsername(ctx, username)
 	if err == nil {
 		return ErrUsernameAlreadyUsed
 	}

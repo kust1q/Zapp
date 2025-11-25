@@ -7,27 +7,27 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kust1q/Zapp/backend/internal/dto"
+	"github.com/kust1q/Zapp/backend/internal/domain/entity"
 )
 
-func (s *tweetService) UpdateTweet(ctx context.Context, userID, tweetID int, req *dto.UpdateTweetRequest) (*dto.UpdateTweetResponse, error) {
+func (s *tweetService) UpdateTweet(ctx context.Context, req *entity.Tweet) (*entity.Tweet, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	tweet, err := s.storage.GetTweetById(ctx, tweetID)
+	tweet, err := s.db.GetTweetById(ctx, req.ID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return &dto.UpdateTweetResponse{}, ErrTweetNotFound
+			return nil, ErrTweetNotFound
 		}
-		return &dto.UpdateTweetResponse{}, fmt.Errorf("failed to get tweet by id: %w", err)
+		return nil, fmt.Errorf("failed to get tweet by id: %w", err)
 	}
-	if tweet.UserID != userID {
-		return &dto.UpdateTweetResponse{}, ErrUnauthorizedUpdate
+	if tweet.Author.ID != req.Author.ID {
+		return nil, ErrUnauthorizedUpdate
 	}
 	tweet.Content = req.Content
 	tweet.UpdatedAt = time.Now()
 	updatedTweet, err := s.storage.UpdateTweet(ctx, tweet)
 	if err != nil {
-		return &dto.UpdateTweetResponse{}, fmt.Errorf("failed to update tweet: %w", err)
+		return nil, fmt.Errorf("failed to update tweet: %w", err)
 	}
 
 	return &dto.UpdateTweetResponse{

@@ -1,14 +1,7 @@
 package main
 
 import (
-	"crypto/rsa"
-	"fmt"
-	"log"
-	"os"
-
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/kust1q/Zapp/backend/internal/config"
-	"github.com/kust1q/Zapp/backend/internal/delivery/http"
 	"github.com/kust1q/Zapp/backend/internal/security"
 	"github.com/kust1q/Zapp/backend/internal/servers"
 	"github.com/kust1q/Zapp/backend/internal/service/auth"
@@ -65,12 +58,6 @@ func main() {
 	}()
 
 	hasher := security.NewHasher(cfg.Cache.HashSecret)
-
-	privateKey, publicKey, err := loadRSAKeys(cfg.JWT.PrivateKeyPath, cfg.JWT.PublicKeyPath)
-	if err != nil {
-		log.Fatalf("Failed to load RSA keys: %v", err)
-	}
-
 	//Init storage
 	userCache := cache.NewAuthCache(redis, hasher, cfg.Cache.TTL)
 	dataStorage := data.NewDataStorage(postgres, userCache)
@@ -92,18 +79,9 @@ func main() {
 			ForceMimeType: "image/gif",
 		},
 		objects.TypeAudio: {
-			MaxSize: 64 * 1024 * 1024, // 64 MB
-			AllowedMime: []string{
-				"audio/mpeg",
-				"audio/wav",
-				"audio/x-wav",
-				"audio/ogg",
-				"audio/flac",
-				"audio/aac",
-				"audio/x-m4a",
-				"audio/webm",
-			},
-			AllowedExt: []string{".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a"},
+			MaxSize:     64 * 1024 * 1024, // 64 MB
+			AllowedMime: []string{"audio/mpeg", "audio/wav", "audio/x-wav", "audio/ogg", "audio/flac", "audio/aac", "audio/x-m4a", "audio/webm"},
+			AllowedExt:  []string{".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a"},
 		},
 	}
 	objectStorage := objects.NewObjectStorage(minio, objects.ObjectStorageConfig{Endpoint: cfg.Minio.Endpoint, BucketName: cfg.Minio.BucketName, UseSSL: cfg.Minio.UseSSL}, mediaTypeMap)
@@ -132,28 +110,4 @@ func main() {
 	if err := srv.Run(cfg.App.Port, handler.InitRouters()); err != nil {
 		logrus.Fatalf("error occurred while running http server: %s", err.Error())
 	}
-}
-
-func loadRSAKeys(privateKeyPath, publicKeyPath string) (*rsa.PrivateKey, *rsa.PublicKey, error) {
-	privatePEM, err := os.ReadFile(privateKeyPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read private key: %w", err)
-	}
-
-	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(privatePEM)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse private key: %w", err)
-	}
-
-	publicPEM, err := os.ReadFile(publicKeyPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read public key: %w", err)
-	}
-
-	publicKey, err := jwt.ParseRSAPublicKeyFromPEM(publicPEM)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse public key: %w", err)
-	}
-
-	return privateKey, publicKey, nil
 }

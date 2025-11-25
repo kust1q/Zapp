@@ -1,6 +1,7 @@
 package media
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
-	"github.com/kust1q/Zapp/backend/internal/dto"
 	"github.com/kust1q/Zapp/backend/internal/storage/objects"
 	"github.com/sirupsen/logrus"
 )
@@ -18,12 +18,12 @@ import (
 type mediaStorage interface {
 	// Tweet
 	UpsertByTweetIdTx(ctx context.Context, tx *sql.Tx, media *entity.TweetMedia) (*entity.TweetMedia, error)
-	GetMediaUrlByTweetID(ctx context.Context, tweetID int) (string, error)
+	GetMediaPathByTweetID(ctx context.Context, tweetID int) (string, error)
 	GetMediaDataByTweetID(ctx context.Context, tweetID int) (*entity.TweetMedia, error)
 	DeleteMediaByTweetID(ctx context.Context, tweetID, userID int) error
 	// User
 	UploadAvatarTx(ctx context.Context, tx *sql.Tx, avatar *entity.Avatar) (*entity.Avatar, error)
-	GetAvatarUrlByUserID(ctx context.Context, userID int) (string, error)
+	GetAvatarPathByUserID(ctx context.Context, userID int) (string, error)
 	GetAvatarDataByUserID(ctx context.Context, userID int) (*entity.Avatar, error)
 	DeleteAvatarByUserID(ctx context.Context, userID int) error
 }
@@ -35,55 +35,77 @@ type objectStorage interface {
 }
 
 type mediaService struct {
-	storage mediaStorage
-	object  objectStorage
+	db     mediaStorage
+	object objectStorage
 }
 
-func NewMediaService(storage mediaStorage, object objectStorage) *mediaService {
-	return &mediaService{storage: storage, object: object}
+func NewMediaService(db mediaStorage, object objectStorage) *mediaService {
+	return &mediaService{db: db, object: object}
 }
 
 func (s *mediaService) UploadAndAttachTweetMediaTx(ctx context.Context, tweetID int, file io.Reader, filename string, tx *sql.Tx) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	mt := s.detectMediaType(filename)
-	path, mime, err := s.object.Upload(ctx, file, mt, filename)
+	mt, err := s.detectMediaType(filename)
 	if err != nil {
 		return "", err
 	}
-	tweetMedia, err := s.storage.UpsertByTweetIdTx(ctx, tx, &entity.TweetMedia{
-		TweetID:  tweetID,
-		Path:     path,
-		MimeType: mime,
+
+	var buf bytes.Buffer
+	size, err := io.Copy(&buf, file)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file for size calculation: %w", err)
+	}
+
+	bufReader := bytes.NewReader(buf.Bytes())
+
+	path, mime, err := s.object.Upload(ctx, bufReader, mt, filename)
+	if err != nil {
+		return "", err
+	}
+	tweetMedia, err := s.db.UpsertByTweetIdTx(ctx, tx, &entity.TweetMedia{
+		TweetID:   tweetID,
+		Path:      path,
+		MimeType:  mime,
+		SizeBytes: size,
 	})
 	if err != nil {
 		s.CleanUpMedia(ctx, path)
 		return "", fmt.Errorf("upsert media failed: %w", err)
 	}
-	return s.GetPresignedURL(ctx, tweetMedia.Path)
+	return s.object.GetPresignedURL(ctx, tweetMedia.Path)
 }
 
 func (s *mediaService) GetMediaUrlByTweetID(ctx context.Context, tweetID int) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	return s.storage.GetMediaUrlByTweetID(ctx, tweetID)
+	mediaPath, err := s.db.GetMediaPathByTweetID(ctx, tweetID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get media url: %w", err)
+	}
+
+	return s.object.GetPresignedURL(ctx, mediaPath)
 }
 
-func (s *mediaService) GetMediaDataByTweetID(ctx context.Context, tweetID int) (*dto.TweetMediaDataResponse, error) {
+func (s *mediaService) GetMediaDataByTweetID(ctx context.Context, tweetID int) (*entity.TweetMedia, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	tweetMedia, err := s.storage.GetMediaDataByTweetID(ctx, tweetID)
-	if err != nil {
-		return &dto.TweetMediaDataResponse{}, fmt.Errorf("failed to get tweet media data: %w", err)
+	tweetMedia, err := s.db.GetMediaDataByTweetID(ctx, tweetID)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, fmt.Errorf("failed to get tweet media data: %w", err)
+	} else if err == sql.ErrNoRows {
+		return &entity.TweetMedia{}, nil
 	}
-	mediaURL, err := s.storage.GetMediaUrlByTweetID(ctx, tweetID)
+
+	mediaURL, err := s.object.GetPresignedURL(ctx, tweetMedia.Path)
 	if err != nil {
-		return &dto.TweetMediaDataResponse{}, fmt.Errorf("failed to get tweet media url: %w", err)
+		return nil, fmt.Errorf("failed to get tweet media url: %w", err)
 	}
-	return &dto.TweetMediaDataResponse{
+
+	return &entity.TweetMedia{
 		ID:        tweetMedia.ID,
 		TweetID:   tweetMedia.TweetID,
-		MediaURL:  mediaURL,
+		Path:      mediaURL,
 		MimeType:  tweetMedia.MimeType,
 		SizeBytes: tweetMedia.SizeBytes,
 	}, nil
@@ -92,11 +114,11 @@ func (s *mediaService) GetMediaDataByTweetID(ctx context.Context, tweetID int) (
 func (s *mediaService) DeleteTweetMedia(ctx context.Context, tweetID, userID int) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	media, err := s.storage.GetMediaDataByTweetID(ctx, tweetID)
+	media, err := s.db.GetMediaDataByTweetID(ctx, tweetID)
 	if err != nil {
 		return err
 	}
-	if err := s.storage.DeleteMediaByTweetID(ctx, tweetID, userID); err != nil {
+	if err := s.db.DeleteMediaByTweetID(ctx, tweetID, userID); err != nil {
 		return err
 	}
 	if media.Path != "" {
@@ -108,69 +130,97 @@ func (s *mediaService) DeleteTweetMedia(ctx context.Context, tweetID, userID int
 func (s *mediaService) UploadAvatarTx(ctx context.Context, userID int, file io.Reader, filename string, tx *sql.Tx) (*entity.Avatar, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	mt := s.detectMediaType(filename)
-	path, mime, err := s.object.Upload(ctx, file, mt, filename)
+
+	mt, err := s.detectMediaType(filename)
 	if err != nil {
-		return &entity.Avatar{}, err
+		return nil, err
 	}
-	avatar, err := s.storage.UploadAvatarTx(ctx, tx, &entity.Avatar{
-		UserID:   userID,
-		Path:     path,
-		MimeType: mime,
+
+	var buf bytes.Buffer
+	size, err := io.Copy(&buf, file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file for size calculation: %w", err)
+	}
+
+	bufReader := bytes.NewReader(buf.Bytes())
+
+	path, mime, err := s.object.Upload(ctx, bufReader, mt, filename)
+	if err != nil {
+		return nil, err
+	}
+
+	avatar, err := s.db.UploadAvatarTx(ctx, tx, &entity.Avatar{
+		UserID:    userID,
+		Path:      path,
+		MimeType:  mime,
+		SizeBytes: size,
 	})
+
 	if err != nil {
 		s.CleanUpMedia(ctx, path)
-		return &entity.Avatar{}, fmt.Errorf("attach media failed: %w", err)
+		return nil, fmt.Errorf("upload avatar failed: %w", err)
 	}
+
+	avatar.Path, err = s.object.GetPresignedURL(ctx, avatar.Path)
+	if err != nil {
+		return nil, fmt.Errorf("get avatar url failed: %w", err)
+	}
+
 	return avatar, nil
 }
 
 func (s *mediaService) GetAvatarUrlByUserID(ctx context.Context, userID int) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	return s.storage.GetAvatarUrlByUserID(ctx, userID)
+	avatarPath, err := s.db.GetMediaPathByTweetID(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get avatar url: %w", err)
+	}
+
+	return s.object.GetPresignedURL(ctx, avatarPath)
 }
 
-func (s *mediaService) GetAvatarDataByUserID(ctx context.Context, userID int) (*dto.AvatarDataResponse, error) {
+func (s *mediaService) GetAvatarDataByUserID(ctx context.Context, userID int) (*entity.Avatar, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	avatar, err := s.storage.GetAvatarDataByUserID(ctx, userID)
+
+	avatar, err := s.db.GetAvatarDataByUserID(ctx, userID)
 	if err != nil {
-		return &dto.AvatarDataResponse{}, fmt.Errorf("failed to get tweet media data: %w", err)
+		return nil, fmt.Errorf("failed to get avatar data: %w", err)
 	}
-	avatarURL, err := s.storage.GetAvatarUrlByUserID(ctx, userID)
+
+	avatarPath, err := s.db.GetAvatarPathByUserID(ctx, userID)
 	if err != nil {
-		return &dto.AvatarDataResponse{}, fmt.Errorf("failed to get tweet media url: %w", err)
+		return nil, fmt.Errorf("failed to get avatar path: %w", err)
 	}
-	return &dto.AvatarDataResponse{
-		ID:        avatar.ID,
-		UserID:    avatar.UserID,
-		AvatarURL: avatarURL,
-		MimeType:  avatar.MimeType,
-		SizeBytes: avatar.SizeBytes,
-	}, nil
+
+	avatarUrl, err := s.object.GetPresignedURL(ctx, avatarPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get avatar url: %w", err)
+	}
+
+	avatar.Path = avatarUrl
+
+	return avatar, nil
 }
 
 func (s *mediaService) DeleteAvatar(ctx context.Context, userID int) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	avatar, err := s.storage.GetAvatarDataByUserID(ctx, userID)
+
+	avatar, err := s.db.GetAvatarDataByUserID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("failed to get data of useravatar: %w", err)
 	}
-	if err := s.storage.DeleteAvatarByUserID(ctx, userID); err != nil {
+
+	if err := s.db.DeleteAvatarByUserID(ctx, userID); err != nil {
 		return err
 	}
+
 	if avatar.Path != "" {
 		s.CleanUpMedia(ctx, avatar.Path)
 	}
 	return nil
-}
-
-func (s *mediaService) GetPresignedURL(ctx context.Context, objectPath string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	return s.object.GetPresignedURL(ctx, objectPath)
 }
 
 func (s *mediaService) CleanUpMedia(ctx context.Context, Path string) {
@@ -182,18 +232,18 @@ func (s *mediaService) CleanUpMedia(ctx context.Context, Path string) {
 	}
 }
 
-func (s *mediaService) detectMediaType(filename string) objects.MediaType {
+func (s *mediaService) detectMediaType(filename string) (objects.MediaType, error) {
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
 	case ".jpg", ".jpeg", ".png", ".webp":
-		return objects.TypeImage
+		return objects.TypeImage, nil
 	case ".gif":
-		return objects.TypeGIF
+		return objects.TypeGIF, nil
 	case ".mp4", ".mov", ".m4v":
-		return objects.TypeVideo
+		return objects.TypeVideo, nil
 	case ".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a", ".webm":
-		return objects.TypeAudio
+		return objects.TypeAudio, nil
 	default:
-		return objects.TypeImage
+		return "", fmt.Errorf("invalid media type")
 	}
 }
