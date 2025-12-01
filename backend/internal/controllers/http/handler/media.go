@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	conv "github.com/kust1q/Zapp/backend/internal/pkg/conv/dto"
+	conv "github.com/kust1q/Zapp/backend/internal/controllers/http/conv"
 	"github.com/sirupsen/logrus"
 )
 

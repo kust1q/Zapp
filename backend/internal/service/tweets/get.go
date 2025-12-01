@@ -21,7 +21,14 @@ func (s *tweetService) GetTweetById(ctx context.Context, tweetID int) (*entity.T
 		return nil, fmt.Errorf("failed to get tweet by id: %w", err)
 	}
 
-	return s.buildEntityTweetToResponse(ctx, tweet)
+	mediaUrl, err := s.media.GetMediaUrlByTweetID(ctx, tweet.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tweet media url")
+	}
+
+	tweet.MediaUrl = mediaUrl
+
+	return s.BuildEntityTweetToResponse(ctx, tweet)
 }
 
 func (s *tweetService) GetTweetsAndRetweetsByUsername(ctx context.Context, username string) ([]entity.Tweet, error) {
@@ -35,9 +42,13 @@ func (s *tweetService) GetTweetsAndRetweetsByUsername(ctx context.Context, usern
 		return nil, fmt.Errorf("failed to get tweets by username: %w", err)
 	}
 
-	//res := make([]entity.Tweet, 0, len(tweets))
 	for i := range tweets {
-		processedTweet, err := s.buildEntityTweetToResponse(ctx, &tweets[i])
+		mediaUrl, err := s.media.GetMediaUrlByTweetID(ctx, tweets[i].ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tweet media url")
+		}
+		tweets[i].MediaUrl = mediaUrl
+		processedTweet, err := s.BuildEntityTweetToResponse(ctx, &tweets[i])
 		if err != nil {
 			return nil, err
 		}
@@ -56,7 +67,12 @@ func (s *tweetService) GetRepliesToTweet(ctx context.Context, tweetID int) ([]en
 	}
 
 	for i := range replies {
-		processedTweet, err := s.buildEntityTweetToResponse(ctx, &replies[i])
+		mediaUrl, err := s.media.GetMediaUrlByTweetID(ctx, replies[i].ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tweet media url")
+		}
+		replies[i].MediaUrl = mediaUrl
+		processedTweet, err := s.BuildEntityTweetToResponse(ctx, &replies[i])
 		if err != nil {
 			return nil, err
 		}

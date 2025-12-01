@@ -5,9 +5,8 @@ import (
 	"fmt"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
-	conv "github.com/kust1q/Zapp/backend/internal/pkg/conv/db"
+	conv "github.com/kust1q/Zapp/backend/internal/providers/db/conv"
 	"github.com/kust1q/Zapp/backend/internal/providers/db/models"
-	"github.com/kust1q/Zapp/backend/internal/storage/postgres"
 )
 
 func (s *PostgresDB) GetFeedByIds(ctx context.Context, userIDs []int) ([]entity.Tweet, error) {
@@ -22,7 +21,7 @@ func (s *PostgresDB) GetFeedByIds(ctx context.Context, userIDs []int) ([]entity.
 		WHERE r.user_id = ANY($1)
 		ORDER BY created_at DESC
 		LIMIT 30`,
-		postgres.TweetsTable, postgres.RetweetsTable, postgres.TweetsTable)
+		TweetsTable, RetweetsTable, TweetsTable)
 
 	var tweetModels []models.Tweet
 	if err := s.db.SelectContext(ctx, &tweetModels, query, userIDs); err != nil {

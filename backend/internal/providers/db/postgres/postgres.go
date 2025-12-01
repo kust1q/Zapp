@@ -3,10 +3,8 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/kust1q/Zapp/backend/internal/config"
 )
 
 const (
@@ -21,28 +19,15 @@ const (
 )
 
 type PostgresDB struct {
-	db        *sqlx.DB
-	userCache UserCache
+	db    *sqlx.DB
+	Cache cache
 }
 
-func NewPostgresDB(cfg config.PostgresConfig, usercCache UserCache) (*PostgresDB, error) {
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode)
-
-	db, err := sqlx.Open("postgres", dsn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database connection: %w", err)
-	}
-
-	err = db.Ping()
-	if err != nil {
-		return nil, err
-	}
-
+func NewPostgresDB(db *sqlx.DB, cache cache) *PostgresDB {
 	return &PostgresDB{
-		db:        db,
-		userCache: usercCache,
-	}, nil
+		db:    db,
+		Cache: cache,
+	}
 }
 
 func (pg *PostgresDB) BeginTx(ctx context.Context) (*sql.Tx, error) {

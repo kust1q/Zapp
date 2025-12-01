@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
+	"github.com/kust1q/Zapp/backend/internal/errs"
 	"github.com/sirupsen/logrus"
 )
 
@@ -18,7 +19,7 @@ func (s *authService) SignOut(ctx context.Context, req *entity.Refresh) error {
 	req.Refresh = strings.TrimSpace(req.Refresh)
 
 	if err := s.tokens.RemoveRefresh(ctx, req.Refresh); err != nil {
-		if errors.Is(err, ErrTokenNotFound) {
+		if errors.Is(err, errs.ErrTokenNotFound) {
 			logrus.Warn("refresh token already deleted or expired")
 		}
 		return fmt.Errorf("failed to delete refresh token: %w", err)

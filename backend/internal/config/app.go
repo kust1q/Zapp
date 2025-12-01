@@ -11,8 +11,8 @@ type (
 	}
 
 	CacheConfig struct {
-		HashSecret string
-		TTL        time.Duration
+		DefaultTtl  time.Duration
+		CountersTtl time.Duration
 	}
 
 	TokensConfig struct {
@@ -50,5 +50,10 @@ type (
 		Port     string
 		Password string
 		DB       int
+	}
+
+	ElasticConfig struct {
+		Host string
+		Port string
 	}
 )

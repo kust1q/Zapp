@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
-	"github.com/kust1q/Zapp/backend/internal/storage/objects"
 	"github.com/sirupsen/logrus"
 )
 
@@ -29,7 +28,7 @@ type mediaStorage interface {
 }
 
 type objectStorage interface {
-	Upload(ctx context.Context, file io.Reader, mediaType objects.MediaType, filename string) (path string, mimeType string, err error)
+	Upload(ctx context.Context, file io.Reader, mediaType entity.MediaType, filename string) (path string, mimeType string, err error)
 	Remove(ctx context.Context, objectPath string) error
 	GetPresignedURL(ctx context.Context, objectPath string) (string, error)
 }
@@ -172,7 +171,7 @@ func (s *mediaService) UploadAvatarTx(ctx context.Context, userID int, file io.R
 func (s *mediaService) GetAvatarUrlByUserID(ctx context.Context, userID int) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	avatarPath, err := s.db.GetMediaPathByTweetID(ctx, userID)
+	avatarPath, err := s.db.GetAvatarPathByUserID(ctx, userID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get avatar url: %w", err)
 	}
@@ -232,17 +231,21 @@ func (s *mediaService) CleanUpMedia(ctx context.Context, Path string) {
 	}
 }
 
-func (s *mediaService) detectMediaType(filename string) (objects.MediaType, error) {
+func (s *mediaService) GetPresignedURL(ctx context.Context, path string) (string, error) {
+	return s.object.GetPresignedURL(ctx, path)
+}
+
+func (s *mediaService) detectMediaType(filename string) (entity.MediaType, error) {
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
 	case ".jpg", ".jpeg", ".png", ".webp":
-		return objects.TypeImage, nil
+		return entity.MediaTypeImage, nil
 	case ".gif":
-		return objects.TypeGIF, nil
+		return entity.MediaTypeGIF, nil
 	case ".mp4", ".mov", ".m4v":
-		return objects.TypeVideo, nil
+		return entity.MediaTypeVideo, nil
 	case ".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a", ".webm":
-		return objects.TypeAudio, nil
+		return entity.MediaTypeAudio, nil
 	default:
 		return "", fmt.Errorf("invalid media type")
 	}

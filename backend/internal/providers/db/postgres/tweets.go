@@ -3,13 +3,15 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
-	conv "github.com/kust1q/Zapp/backend/internal/pkg/conv/db"
+	"github.com/kust1q/Zapp/backend/internal/errs"
+	conv "github.com/kust1q/Zapp/backend/internal/providers/db/conv"
 	"github.com/kust1q/Zapp/backend/internal/providers/db/models"
-	"github.com/kust1q/Zapp/backend/internal/storage/postgres"
+	"github.com/sirupsen/logrus"
 )
 
 func (pg *PostgresDB) CreateTweet(ctx context.Context, tweet *entity.Tweet) (*entity.Tweet, error) {
@@ -18,12 +20,29 @@ func (pg *PostgresDB) CreateTweet(ctx context.Context, tweet *entity.Tweet) (*en
 		return nil, fmt.Errorf("cannot convert nil entity to DB model")
 	}
 
-	query := fmt.Sprintf("INSERT INTO %s (user_id, parent_tweet_id, content, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING id", postgres.TweetsTable)
+	query := fmt.Sprintf("INSERT INTO %s (user_id, parent_tweet_id, content, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING id", TweetsTable)
 	var id int
 	if err := pg.db.QueryRowContext(ctx, query, tweetModel.UserID, tweetModel.ParentTweetID, tweetModel.Content, tweetModel.CreatedAt, tweetModel.UpdatedAt).Scan(&id); err != nil {
 		return nil, err
 	}
 	tweetModel.ID = id
+	go func(model *models.Tweet) {
+		cntx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		err := pg.Cache.SetTweet(cntx, model)
+		logrus.WithError(err).Warnf("set tweet to Cache failed")
+
+		if tweetModel.ParentTweetID != nil {
+			err := pg.Cache.InvalidateReplies(cntx, *model.ParentTweetID)
+			if err != nil {
+				logrus.WithError(err).Warnf("invalidate Cached replies failed")
+			}
+			err = pg.Cache.InvalidateTweetCounters(cntx, *model.ParentTweetID)
+			if err != nil {
+				logrus.WithError(err).Warnf("invalidate Cached counters failed")
+			}
+		}
+	}(tweetModel)
 	createdtweet := conv.FromTweetModelToDomain(tweetModel)
 	return createdtweet, nil
 }
@@ -34,29 +53,61 @@ func (pg *PostgresDB) CreateTweetTx(ctx context.Context, tx *sql.Tx, tweet *enti
 		return nil, fmt.Errorf("cannot convert nil entity to DB model")
 	}
 
-	query := fmt.Sprintf("INSERT INTO %s (user_id, parent_tweet_id, content, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING id", postgres.TweetsTable)
+	query := fmt.Sprintf("INSERT INTO %s (user_id, parent_tweet_id, content, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING id", TweetsTable)
 	var id int
 	if err := tx.QueryRowContext(ctx, query, tweetModel.UserID, tweetModel.ParentTweetID, tweetModel.Content, tweetModel.CreatedAt, tweetModel.UpdatedAt).Scan(&id); err != nil {
 		return nil, err
 	}
 	tweetModel.ID = id
+
+	go func(model *models.Tweet) {
+		if tweetModel.ParentTweetID != nil {
+			cntx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			err := pg.Cache.InvalidateReplies(cntx, *tweetModel.ParentTweetID)
+			if err != nil {
+				logrus.WithError(err).Warnf("invalidate Cached replies failed")
+			}
+			err = pg.Cache.InvalidateTweetCounters(cntx, *tweetModel.ParentTweetID)
+			if err != nil {
+				logrus.WithError(err).Warnf("invalidate Cached counters failed")
+			}
+		}
+	}(tweetModel)
+
 	createdtweet := conv.FromTweetModelToDomain(tweetModel)
 	return createdtweet, nil
 }
 
 func (pg *PostgresDB) GetTweetById(ctx context.Context, tweetID int) (*entity.Tweet, error) {
-	query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1", postgres.TweetsTable)
+	cachedModel, err := pg.Cache.GetTweet(ctx, tweetID)
+	if err != nil && !errors.Is(err, errs.ErrCacheKeyNotFound) {
+		logrus.WithError(err).Warnf("get tweet from Cache failed")
+	} else if err == nil {
+		return conv.FromTweetModelToDomain(cachedModel), nil
+	}
+
+	query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1", TweetsTable)
 	var tweetModel models.Tweet
-	err := pg.db.GetContext(ctx, &tweetModel, query, tweetID)
+	err = pg.db.GetContext(ctx, &tweetModel, query, tweetID)
 	if err != nil {
 		return nil, err
 	}
-	tweet := conv.FromTweetModelToDomain(&tweetModel)
-	return tweet, nil
+
+	go func(model *models.Tweet) {
+		cntx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err = pg.Cache.SetTweet(cntx, model)
+		if err != nil {
+			logrus.WithError(err).Warnf("set tweet to Cache failed")
+		}
+	}(&tweetModel)
+
+	return conv.FromTweetModelToDomain(&tweetModel), nil
 }
 
 func (pg *PostgresDB) UpdateTweet(ctx context.Context, tweet *entity.Tweet) (*entity.Tweet, error) {
-	query := fmt.Sprintf("UPDATE %s SET content = $1, updated_at = $2 WHERE id = $3 RETURNING content, updated_at", postgres.TweetsTable)
+	query := fmt.Sprintf("UPDATE %s SET content = $1, updated_at = $2 WHERE id = $3 RETURNING content, updated_at", TweetsTable)
 	var content string
 	var updatedAt time.Time
 	err := pg.db.QueryRowContext(ctx, query, tweet.Content, tweet.UpdatedAt, tweet.ID).Scan(&content, &updatedAt)
@@ -65,11 +116,20 @@ func (pg *PostgresDB) UpdateTweet(ctx context.Context, tweet *entity.Tweet) (*en
 	}
 	tweet.Content = content
 	tweet.UpdatedAt = updatedAt
+
+	go func(tweetID int) {
+		cntx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err = pg.Cache.InvalidateTweet(cntx, tweetID)
+		if err != nil {
+			logrus.WithError(err).Warn("invalidate tweet in Cache failed")
+		}
+	}(tweet.ID)
 	return tweet, nil
 }
 
 func (pg *PostgresDB) DeleteTweet(ctx context.Context, userID, tweetID int) error {
-	query := fmt.Sprintf("DELETE FROM %s WHERE id = $1 AND user_id = $2", postgres.TweetsTable)
+	query := fmt.Sprintf("DELETE FROM %s WHERE id = $1 AND user_id = $2", TweetsTable)
 	result, err := pg.db.ExecContext(ctx, query, tweetID, userID)
 	if err != nil {
 		return err
@@ -81,12 +141,20 @@ func (pg *PostgresDB) DeleteTweet(ctx context.Context, userID, tweetID int) erro
 	if rowsAffected == 0 {
 		return fmt.Errorf("tweet not found")
 	}
+	go func(tweetID int) {
+		cntx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err = pg.Cache.InvalidateTweet(cntx, tweetID)
+		if err != nil {
+			logrus.WithError(err).Warn("invalidate tweet in Cache failed")
+		}
+	}(tweetID)
 	return nil
 }
 
 func (pg *PostgresDB) LikeTweet(ctx context.Context, userID, tweetID int) error {
 	var exists bool
-	checkQuery := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE id = $1)", postgres.TweetsTable)
+	checkQuery := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE id = $1)", TweetsTable)
 	err := pg.db.QueryRowContext(ctx, checkQuery, tweetID).Scan(&exists)
 	if err != nil {
 		return err
@@ -94,13 +162,26 @@ func (pg *PostgresDB) LikeTweet(ctx context.Context, userID, tweetID int) error 
 	if !exists {
 		return fmt.Errorf("tweet not found")
 	}
-	query := fmt.Sprintf("INSERT INTO %s (user_id, tweet_id) VALUES ($1, $2) ON CONFLICT (user_id, tweet_id) DO NOTHING", postgres.LikesTable)
+	query := fmt.Sprintf("INSERT INTO %s (user_id, tweet_id) VALUES ($1, $2) ON CONFLICT (user_id, tweet_id) DO NOTHING", LikesTable)
 	_, err = pg.db.ExecContext(ctx, query, userID, tweetID)
-	return err
+	if err != nil {
+		return err
+	}
+
+	go func(tweetID int) {
+		cntx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err = pg.Cache.InvalidateTweetLikers(cntx, tweetID)
+		if err != nil {
+			logrus.WithError(err).Warn("invalidate tweet in Cache failed")
+		}
+	}(tweetID)
+
+	return nil
 }
 
 func (pg *PostgresDB) UnLikeTweet(ctx context.Context, userID, tweetID int) error {
-	query := fmt.Sprintf("DELETE FROM %s WHERE user_id = $1 AND tweet_id = $2", postgres.LikesTable)
+	query := fmt.Sprintf("DELETE FROM %s WHERE user_id = $1 AND tweet_id = $2", LikesTable)
 	result, err := pg.db.ExecContext(ctx, query, userID, tweetID)
 	if err != nil {
 		return err
@@ -112,12 +193,20 @@ func (pg *PostgresDB) UnLikeTweet(ctx context.Context, userID, tweetID int) erro
 	if rowsAffected == 0 {
 		return fmt.Errorf("tweet not found")
 	}
+	go func(tweetID int) {
+		cntx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err = pg.Cache.InvalidateTweetLikers(cntx, tweetID)
+		if err != nil {
+			logrus.WithError(err).Warn("invalidate tweet in Cache failed")
+		}
+	}(tweetID)
 	return nil
 }
 
 func (pg *PostgresDB) Retweet(ctx context.Context, userID, tweetID int, createdAt time.Time) error {
 	var exists bool
-	checkQuery := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE id = $1)", postgres.TweetsTable)
+	checkQuery := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE id = $1)", TweetsTable)
 	err := pg.db.QueryRowContext(ctx, checkQuery, tweetID).Scan(&exists)
 	if err != nil {
 		return err
@@ -125,13 +214,13 @@ func (pg *PostgresDB) Retweet(ctx context.Context, userID, tweetID int, createdA
 	if !exists {
 		return fmt.Errorf("tweet not found")
 	}
-	query := fmt.Sprintf("INSERT INTO %s (user_id, tweet_id, created_at) VALUES ($1, $2, $3)", postgres.RetweetsTable)
+	query := fmt.Sprintf("INSERT INTO %s (user_id, tweet_id, created_at) VALUES ($1, $2, $3)", RetweetsTable)
 	_, err = pg.db.ExecContext(ctx, query, userID, tweetID, createdAt)
 	return err
 }
 
 func (pg *PostgresDB) DeleteRetweet(ctx context.Context, userID, retweetID int) error {
-	query := fmt.Sprintf("DELETE FROM %s WHERE user_id = $1 AND tweet_id = $2", postgres.RetweetsTable)
+	query := fmt.Sprintf("DELETE FROM %s WHERE user_id = $1 AND tweet_id = $2", RetweetsTable)
 	result, err := pg.db.ExecContext(ctx, query, userID, retweetID)
 	if err != nil {
 		return err
@@ -147,16 +236,62 @@ func (pg *PostgresDB) DeleteRetweet(ctx context.Context, userID, retweetID int) 
 }
 
 func (pg *PostgresDB) GetRepliesToTweet(ctx context.Context, parentTweetID int) ([]entity.Tweet, error) {
-	query := fmt.Sprintf("SELECT id, user_id, parent_tweet_id, content, created_at, updated_at FROM %s WHERE parent_tweet_id = $1 ORDER BY created_at DESC", postgres.TweetsTable)
+	ids, err := pg.Cache.GetReplyIDs(ctx, parentTweetID)
+	if err != nil && !errors.Is(err, errs.ErrCacheKeyNotFound) {
+		logrus.WithError(err).Warnf("get reply ids from Cache failed")
+	} else if err == nil && len(ids) > 0 {
+		tweetsMap, err := pg.Cache.MGetTweets(ctx, ids)
+		if err == nil && len(tweetsMap) == len(ids) {
+			var res []models.Tweet
+			for _, id := range ids {
+				res = append(res, *tweetsMap[id])
+			}
+			return conv.FromTweetModelToDomainList(res), nil
+		}
+	}
+
+	query := fmt.Sprintf("SELECT id, user_id, parent_tweet_id, content, created_at, updated_at FROM %s WHERE parent_tweet_id = $1 ORDER BY created_at DESC", TweetsTable)
 	var tweetModels []models.Tweet
 	if err := pg.db.SelectContext(ctx, &tweetModels, query, parentTweetID); err != nil {
 		return nil, err
 	}
 
+	go func(tweetModels []models.Tweet) {
+		cntx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		var idList []int
+		for _, t := range tweetModels {
+			idList = append(idList, t.ID)
+			err = pg.Cache.SetTweet(cntx, &t)
+			if err != nil {
+				logrus.WithError(err).Warnf("set tweet to Cache failed")
+			}
+		}
+		err = pg.Cache.SetReplyIDs(cntx, parentTweetID, idList)
+		if err != nil {
+			logrus.WithError(err).Warnf("set reply ids to Cache failed")
+		}
+	}(tweetModels)
+
 	return conv.FromTweetModelToDomainList(tweetModels), nil
 }
 
 func (pg *PostgresDB) GetTweetsAndRetweetsByUsername(ctx context.Context, username string) ([]entity.Tweet, error) {
+	ids, err := pg.Cache.GetUserTweetIDs(ctx, username)
+
+	if err != nil && !errors.Is(err, errs.ErrCacheKeyNotFound) {
+		logrus.WithError(err).Warnf("get reply ids from Cache failed")
+	} else if err == nil && len(ids) > 0 {
+		tweetsMap, err := pg.Cache.MGetTweets(ctx, ids)
+		if err == nil && len(tweetsMap) == len(ids) {
+			var res []models.Tweet
+			for _, id := range ids {
+				res = append(res, *tweetsMap[id])
+			}
+			return conv.FromTweetModelToDomainList(res), nil
+		}
+	}
+
 	query := fmt.Sprintf(`
         SELECT t.id, t.user_id, t.parent_tweet_id, t.content, t.created_at, t.updated_at 
         FROM %s t 
@@ -169,39 +304,111 @@ func (pg *PostgresDB) GetTweetsAndRetweetsByUsername(ctx context.Context, userna
         JOIN %s u ON r.user_id = u.id
         WHERE u.username = $1 
         ORDER BY created_at DESC`,
-		postgres.TweetsTable, postgres.UserTable, postgres.RetweetsTable, postgres.TweetsTable, postgres.UserTable)
+		TweetsTable, UserTable, RetweetsTable, TweetsTable, UserTable)
 
 	var tweetModels []models.Tweet
 	if err := pg.db.SelectContext(ctx, &tweetModels, query, username); err != nil {
 		return nil, fmt.Errorf("failed to get tweets by username: %w", err)
 	}
 
+	go func(tweetModels []models.Tweet) {
+		cntx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		var idList []int
+		for _, t := range tweetModels {
+			idList = append(idList, t.ID)
+			err = pg.Cache.SetTweet(cntx, &t)
+			if err != nil {
+				logrus.WithError(err).Warnf("set tweet to Cache failed")
+			}
+		}
+		err = pg.Cache.SetUserTweetIDs(cntx, username, idList)
+		if err != nil {
+			logrus.WithError(err).Warnf("set user tweets ids to Cache failed")
+		}
+	}(tweetModels)
+
 	return conv.FromTweetModelToDomainList(tweetModels), nil
 }
 
-func (pg *PostgresDB) GetCounts(ctx context.Context, tweetID int) (likes, retweets, replies int, err error) {
+func (pg *PostgresDB) GetCounts(ctx context.Context, tweetID int) (*entity.Counters, error) {
+	Cached, err := pg.Cache.GetTweetCounters(ctx, tweetID)
+	if err != nil && !errors.Is(err, errs.ErrCacheKeyNotFound) {
+		logrus.WithError(err).Warn("get tweet counters from Cache failed")
+	} else if err == nil {
+		return conv.FromCountersModelToDomain(Cached), nil
+	}
+
 	query := fmt.Sprintf(`
         SELECT 
             (SELECT COUNT(*) FROM %s WHERE tweet_id = $1) as likes,
             (SELECT COUNT(*) FROM %s WHERE tweet_id = $1) as retweets,
             (SELECT COUNT(*) FROM %s WHERE parent_tweet_id = $1) as replies
-    `, postgres.LikesTable, postgres.RetweetsTable, postgres.TweetsTable)
+    `, LikesTable, RetweetsTable, TweetsTable)
 
+	var likes, retweets, replies int
 	err = pg.db.QueryRowContext(ctx, query, tweetID).Scan(&likes, &retweets, &replies)
-	return
+	if err != nil {
+		return nil, err
+	}
+	countersModel := &models.Counters{
+		LikeCount:    likes,
+		RetweetCount: retweets,
+		ReplyCount:   replies,
+	}
+
+	go func(tweetID int, model *models.Counters) {
+		cntx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err = pg.Cache.SetTweetCounters(cntx, tweetID, countersModel)
+		if err != nil {
+			logrus.WithError(err).Warn("set tweet counters to Cache failed")
+		}
+	}(tweetID, countersModel)
+
+	return conv.FromCountersModelToDomain(countersModel), nil
 }
 
-func (pg *PostgresDB) GetLikes(ctx context.Context, tweetID int) ([]entity.Like, error) {
-	query := fmt.Sprintf(`
-        SELECT u.id as user_id, u.username, u.avatar_url
+func (pg *PostgresDB) GetLikes(ctx context.Context, tweetID int) ([]entity.SmallUser, error) {
+	query := fmt.Sprintf(
+		`SELECT u.id, u.username, a.path as avatar_path
         FROM %s l
         JOIN %s u ON l.user_id = u.id
+        JOIN %s a ON u.id = a.user_id
         WHERE l.tweet_id = $1`,
-		postgres.LikesTable, postgres.UserTable)
+		LikesTable, UserTable, AvatarsTable)
 
-	var userLikes []models.Like
-	if err := pg.db.SelectContext(ctx, &userLikes, query, tweetID); err != nil {
+	type LikerRow struct {
+		ID         int    `db:"id"`
+		Username   string `db:"username"`
+		AvatarPath string `db:"avatar_path"`
+	}
+
+	var rows []LikerRow
+	if err := pg.db.SelectContext(ctx, &rows, query, tweetID); err != nil {
 		return nil, fmt.Errorf("failed to get users who liked tweet: %w", err)
 	}
-	return conv.FromLikeModelToDomainList(userLikes), nil
+
+	res := make([]entity.SmallUser, 0, len(rows))
+	ids := make([]int, 0, len(rows))
+
+	for _, row := range rows {
+		res = append(res, entity.SmallUser{
+			ID:        row.ID,
+			Username:  row.Username,
+			AvatarURL: row.AvatarPath,
+		})
+		ids = append(ids, row.ID)
+	}
+
+	go func() {
+		cntx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := pg.Cache.SetTweetLikerIDs(cntx, tweetID, ids); err != nil {
+			logrus.WithError(err).Warn("set tweet likers to cache failed")
+		}
+	}()
+
+	return res, nil
 }

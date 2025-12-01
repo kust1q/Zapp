@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -18,6 +19,7 @@ type config struct {
 	Postgres PostgresConfig
 	Minio    MinioConfig
 	Redis    RedisConfig
+	Elastic  ElasticConfig
 	Cache    CacheConfig
 	Tokens   TokensConfig
 	JWT      JWTConfig
@@ -29,7 +31,7 @@ var (
 )
 
 func Get() *config {
-	privateKey, publicKey, err := loadRSAKeys(viper.GetString("jwt.private"), viper.GetString("jwt.public"))
+	privateKey, publicKey, err := loadRSAKeys(os.Getenv("PRIVATE_KEY_PATH"), os.Getenv("PUBLIC_KEY_PATH"))
 	if err != nil {
 		logrus.Fatalf("Failed to load RSA keys: %v", err)
 	}
@@ -42,29 +44,33 @@ func Get() *config {
 			Postgres: PostgresConfig{
 				Host:     viper.GetString("db.host"),
 				Port:     viper.GetString("db.port"),
-				User:     viper.GetString("db.user"),
-				Password: viper.GetString("db.password"),
-				DBName:   viper.GetString("db.name"),
+				User:     os.Getenv("POSTGRES_USER"),
+				Password: os.Getenv("POSTGRES_PASSWORD"),
+				DBName:   os.Getenv("POSTGRES_DB"),
 				SSLMode:  viper.GetString("db.sslmode"),
 			},
 			Minio: MinioConfig{
 				Port:       viper.GetString("minio.port"),
 				Endpoint:   viper.GetString("minio.endpoint"),
 				BucketName: viper.GetString("minio.bucketname"),
-				User:       viper.GetString("minio.user"),
-				Password:   viper.GetString("minio.password"),
+				User:       os.Getenv("MINIO_USER"),
+				Password:   os.Getenv("MINIO_PASSWORD"),
 				UseSSL:     viper.GetBool("minio.sslmode"),
 				TTL:        viper.GetDuration("minio.ttl"),
 			},
 			Redis: RedisConfig{
 				Host:     viper.GetString("redis.host"),
 				Port:     viper.GetString("redis.port"),
-				Password: viper.GetString("redis.password"),
+				Password: os.Getenv("REDIS_PASSWORD"),
 				DB:       viper.GetInt("redis.db"),
 			},
+			Elastic: ElasticConfig{
+				Host: viper.GetString("elastic.host"),
+				Port: viper.GetString("elastic.port"),
+			},
 			Cache: CacheConfig{
-				HashSecret: viper.GetString("cache.secret"),
-				TTL:        viper.GetDuration("cache.ttl"),
+				DefaultTtl:  viper.GetDuration("cache.defaultTtl"),
+				CountersTtl: viper.GetDuration("cache.countersTtl"),
 			},
 			Tokens: TokensConfig{
 				AccessTTL:   viper.GetDuration("tokens.accessTTL"),
@@ -142,11 +148,20 @@ func (c *config) Validate() error {
 		allErrs = append(allErrs, "redis: db must be >= 0")
 	}
 
-	if c.Cache.HashSecret == "" {
-		allErrs = append(allErrs, "hash: secret is required")
+	el := c.Elastic
+	if el.Host == "" {
+		allErrs = append(allErrs, "elastic: host is required")
 	}
-	if c.Cache.TTL <= 0 {
-		allErrs = append(allErrs, "hash: ttl must be > 0")
+	if el.Port == "" {
+		allErrs = append(allErrs, "elastic: port is required")
+	}
+
+	if c.Cache.DefaultTtl <= 0 {
+		allErrs = append(allErrs, "cache: default ttl must be > 0")
+	}
+
+	if c.Cache.CountersTtl <= 0 {
+		allErrs = append(allErrs, "cache: counters ttl must be > 0")
 	}
 
 	if c.Tokens.AccessTTL <= 0 {
@@ -171,28 +186,31 @@ func (c *config) Validate() error {
 }
 
 func InitConfig() error {
-	viper.AutomaticEnv()
-
 	viper.SetConfigFile(".env")
 	if err := viper.MergeInConfig(); err != nil {
 		logrus.Printf("warning: .env file not loaded: %v", err)
 	}
 
+	viper.AutomaticEnv()
+
+	if err := godotenv.Load(); err != nil {
+		logrus.Warn("No .env file found, assuming env vars are set")
+	}
+
 	viper.SetConfigName("config")
-	viper.AddConfigPath("../../configs")
+	viper.AddConfigPath("configs")
 	viper.SetConfigType("yaml")
 	if err := viper.ReadInConfig(); err != nil {
 		return fmt.Errorf("error reading config file: %w", err)
 	}
 
 	return nil
-
 }
 
 func loadRSAKeys(privateKeyPath, publicKeyPath string) (*rsa.PrivateKey, *rsa.PublicKey, error) {
 	privatePEM, err := os.ReadFile(privateKeyPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read private key: %w", err)
+		return nil, nil, fmt.Errorf("failed to read private key from %s: %w", privateKeyPath, err)
 	}
 
 	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(privatePEM)

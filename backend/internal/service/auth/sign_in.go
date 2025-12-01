@@ -13,6 +13,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
+	"github.com/kust1q/Zapp/backend/internal/errs"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -33,13 +34,13 @@ func (s *authService) SignIn(ctx context.Context, req *entity.Credential) (*enti
 	user, err := s.db.GetUserByEmail(ctx, req.Email)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrInvalidCredentials
+			return nil, errs.ErrInvalidCredentials
 		}
 		return nil, fmt.Errorf("failed to find user: %w", err)
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Credential.Password), []byte(req.Password)); err != nil {
-		return nil, ErrInvalidCredentials
+		return nil, errs.ErrInvalidCredentials
 	}
 
 	role := "user"
@@ -78,7 +79,7 @@ func (s *authService) generateAccessToken(userID int, email, role string) (strin
 			Issuer:    "zapp",
 		},
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	return token.SignedString(s.cfg.PrivateKey)
 }
 

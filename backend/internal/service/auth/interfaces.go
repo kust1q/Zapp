@@ -10,10 +10,6 @@ import (
 )
 
 type (
-	authCache interface {
-		Add(ctx context.Context, dataType, data string) error
-	}
-
 	dataStorage interface {
 		BeginTx(ctx context.Context) (*sql.Tx, error)
 		CreateUserTx(ctx context.Context, tx *sql.Tx, user *entity.User) (*entity.User, error)
@@ -38,6 +34,9 @@ type (
 
 	mediaService interface {
 		UploadAvatarTx(ctx context.Context, userID int, file io.Reader, filename string, tx *sql.Tx) (*entity.Avatar, error)
-		GetPresignedURL(ctx context.Context, objectPath string) (string, error)
+	}
+
+	searchRepository interface {
+		IndexUser(ctx context.Context, user *entity.User) error
 	}
 )

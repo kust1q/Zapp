@@ -17,7 +17,6 @@ type (
 		UpdatePassword(ctx context.Context, req *entity.UpdatePassword) error
 		ForgotPassword(ctx context.Context, req *entity.ForgotPassword) (*entity.Recovery, error)
 		RecoveryPassword(ctx context.Context, req *entity.RecoveryPassword) error
-
 		GetRefreshTTL() time.Duration
 	}
 
@@ -27,7 +26,6 @@ type (
 		UpdateTweet(ctx context.Context, req *entity.Tweet) (*entity.Tweet, error)
 		LikeTweet(ctx context.Context, userID, tweetID int) error
 		UnlikeTweet(ctx context.Context, userID, tweetID int) error
-		//ReplyToTweet(ctx context.Context, req *entity.Tweet) (*entity.Tweet, error)
 		GetRepliesToTweet(ctx context.Context, tweetID int) ([]entity.Tweet, error)
 		CreateRetweet(ctx context.Context, userID, tweetID int) error
 		DeleteRetweet(ctx context.Context, userID, retweetID int) error
@@ -48,6 +46,8 @@ type (
 	}
 
 	SearchService interface {
+		SearchUsers(ctx context.Context, query string) ([]entity.User, error)
+		SearchTweets(ctx context.Context, query string) ([]entity.Tweet, error)
 	}
 
 	FeedService interface {

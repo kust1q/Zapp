@@ -1,37 +1,26 @@
 package auth
 
 import (
-	"errors"
 	"time"
 
 	"github.com/kust1q/Zapp/backend/internal/config"
-)
-
-var (
-	ErrUsernameAlreadyUsed = errors.New("username already used")
-	ErrEmailAlreadyUsed    = errors.New("email already used")
-	ErrInvalidInput        = errors.New("invalid input data")
-	ErrInvalidCredentials  = errors.New("invalid credential")
-	ErrTokenNotFound       = errors.New("refresh token not found")
-	ErrInvalidRefreshToken = errors.New("invalid refresh token")
-	ErrUserNotFound        = errors.New("user not found")
 )
 
 type authService struct {
 	cfg    config.AuthServiceConfig
 	db     dataStorage
 	tokens tokenStorage
-	cache  authCache
 	media  mediaService
+	search searchRepository
 }
 
-func NewAuthService(cfg config.AuthServiceConfig, db dataStorage, cache authCache, media mediaService, tokens tokenStorage) *authService {
+func NewAuthService(cfg config.AuthServiceConfig, db dataStorage, media mediaService, tokens tokenStorage, search searchRepository) *authService {
 	return &authService{
 		cfg:    cfg,
 		db:     db,
-		cache:  cache,
 		media:  media,
 		tokens: tokens,
+		search: search,
 	}
 }
 

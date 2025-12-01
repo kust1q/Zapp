@@ -10,12 +10,12 @@ const (
 	prefixUserSessions  = "user_sessions:"
 )
 
-type tokenStorage struct {
+type tokensDB struct {
 	redis *redis.Client
 }
 
-func NewTokenStorage(redis *redis.Client) *tokenStorage {
-	return &tokenStorage{
+func NewTokenStorage(redis *redis.Client) *tokensDB {
+	return &tokensDB{
 		redis: redis,
 	}
 }

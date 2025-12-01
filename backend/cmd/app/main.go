@@ -1,19 +1,32 @@
 package main
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/kust1q/Zapp/backend/internal/config"
-	"github.com/kust1q/Zapp/backend/internal/security"
-	"github.com/kust1q/Zapp/backend/internal/servers"
+	httpHandler "github.com/kust1q/Zapp/backend/internal/controllers/http/handler"
+	"github.com/kust1q/Zapp/backend/internal/domain/entity"
+	s3 "github.com/kust1q/Zapp/backend/internal/providers/db/minio"
+	db "github.com/kust1q/Zapp/backend/internal/providers/db/postgres"
+	"github.com/kust1q/Zapp/backend/internal/providers/db/redis/cache"
+	"github.com/kust1q/Zapp/backend/internal/providers/db/redis/tokens"
+	"github.com/kust1q/Zapp/backend/internal/providers/search/elastic"
 	"github.com/kust1q/Zapp/backend/internal/service/auth"
+	"github.com/kust1q/Zapp/backend/internal/service/feed"
 	"github.com/kust1q/Zapp/backend/internal/service/media"
+	"github.com/kust1q/Zapp/backend/internal/service/search"
 	"github.com/kust1q/Zapp/backend/internal/service/tweets"
 	"github.com/kust1q/Zapp/backend/internal/service/user"
-	"github.com/kust1q/Zapp/backend/internal/storage/cache"
-	"github.com/kust1q/Zapp/backend/internal/storage/data"
-	"github.com/kust1q/Zapp/backend/internal/storage/minio"
-	"github.com/kust1q/Zapp/backend/internal/storage/objects"
-	"github.com/kust1q/Zapp/backend/internal/storage/postgres"
-	"github.com/kust1q/Zapp/backend/internal/storage/redis"
+	el "github.com/kust1q/Zapp/backend/pkg/elastic"
+	mn "github.com/kust1q/Zapp/backend/pkg/minio"
+	pg "github.com/kust1q/Zapp/backend/pkg/postgres"
+	rs "github.com/kust1q/Zapp/backend/pkg/redis"
 	_ "github.com/lib/pq"
 	"github.com/sirupsen/logrus"
 )
@@ -21,93 +34,117 @@ import (
 func main() {
 	logrus.SetFormatter(new(logrus.JSONFormatter))
 
-	//Configs
+	// --- Configs ---
 	if err := config.InitConfig(); err != nil {
-		logrus.WithError(err).Fatal("Error initializing config")
+		logrus.WithError(err).Fatal("error initializing config")
 	}
-
 	cfg := config.Get()
-
 	if err := cfg.Validate(); err != nil {
-		logrus.WithError(err).Fatal("Invalid configuration")
-	}
-	//DBs
-	postgres, err := postgres.NewPostgresDB(cfg.Postgres)
-	if err != nil {
-		logrus.WithError(err).Fatal("Failed to initialize database")
-	}
-	defer func() {
-		if err := postgres.Close(); err != nil {
-			logrus.WithError(err).Error("Failed to close database connection")
-		}
-	}()
-
-	minio, err := minio.NewMinioClient(cfg.Minio)
-	if err != nil {
-		logrus.WithError(err).Fatal("Failed to initialize minio client")
+		logrus.WithError(err).Fatal("invalid configuration")
 	}
 
-	redis, err := redis.NewRedisClient(cfg.Redis)
+	redisClient, err := rs.NewRedisClient(&cfg.Redis)
 	if err != nil {
-		logrus.WithError(err).Fatal("Failed to initialize redis client")
+		logrus.WithError(err).Fatal("failed to initialize redis client")
 	}
-	defer func() {
-		if err := redis.Close(); err != nil {
-			logrus.WithError(err).Error("Failed to close Redis connection")
-		}
-	}()
+	cache := cache.NewCache(redisClient, cfg.Cache.DefaultTtl, cfg.Cache.CountersTtl)
 
-	hasher := security.NewHasher(cfg.Cache.HashSecret)
-	//Init storage
-	userCache := cache.NewAuthCache(redis, hasher, cfg.Cache.TTL)
-	dataStorage := data.NewDataStorage(postgres, userCache)
-	mediaTypeMap := map[objects.MediaType]objects.MediaTypeConfig{
-		objects.TypeImage: {
-			MaxSize:     16 * 1024 * 1024, // 16MB
+	elasticClient, err := el.NewElasticClient([]string{fmt.Sprintf("http://%s:%s", cfg.Elastic.Host, cfg.Elastic.Port)})
+	if err != nil {
+		logrus.Fatalf("failed to connect to elasticsearch: %v", err)
+	}
+	elasticRepo := elastic.NewElasticRepository(elasticClient)
+
+	postgresConnect, err := pg.NewPostgresConnect(&cfg.Postgres)
+	if err != nil {
+		logrus.WithError(err).Fatal("failed to initialize pg connect")
+	}
+	pgDB := db.NewPostgresDB(postgresConnect, cache)
+
+	minioClient, err := mn.NewMinioClient(&cfg.Minio)
+	if err != nil {
+		logrus.WithError(err).Fatal("failed to initialize minio client")
+	}
+
+	mediaTypeMap := map[entity.MediaType]s3.MediaPolicy{
+		entity.MediaTypeImage: {
+			MaxSize:     16 * 1024 * 1024,
 			AllowedMime: []string{"image/jpeg", "image/png", "image/webp"},
 			AllowedExt:  []string{".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"},
 		},
-		objects.TypeVideo: {
-			MaxSize:     512 * 1024 * 1024, // 512 MB
+		entity.MediaTypeVideo: {
+			MaxSize:     512 * 1024 * 1024,
 			AllowedMime: []string{"video/mp4", "video/quicktime", "video/x-m4v"},
 			AllowedExt:  []string{".mp4", ".mov", ".m4v", ".avi", ".wmv", ".flv", ".webm"},
 		},
-		objects.TypeGIF: {
-			MaxSize:       16 * 1024 * 1024, // 16MB
+		entity.MediaTypeGIF: {
+			MaxSize:       16 * 1024 * 1024,
 			AllowedMime:   []string{"image/gif"},
 			AllowedExt:    []string{".gif"},
 			ForceMimeType: "image/gif",
 		},
-		objects.TypeAudio: {
-			MaxSize:     64 * 1024 * 1024, // 64 MB
+		entity.MediaTypeAudio: {
+			MaxSize:     64 * 1024 * 1024,
 			AllowedMime: []string{"audio/mpeg", "audio/wav", "audio/x-wav", "audio/ogg", "audio/flac", "audio/aac", "audio/x-m4a", "audio/webm"},
 			AllowedExt:  []string{".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a"},
 		},
 	}
-	objectStorage := objects.NewObjectStorage(minio, objects.ObjectStorageConfig{Endpoint: cfg.Minio.Endpoint, BucketName: cfg.Minio.BucketName, UseSSL: cfg.Minio.UseSSL}, mediaTypeMap)
 
-	//Init services
-	mediaService := media.NewMediaService(dataStorage, objectStorage)
+	minioDB := s3.NewMinioDB(minioClient, &cfg.Minio, mediaTypeMap)
+
+	mediaService := media.NewMediaService(pgDB, minioDB)
 	authService := auth.NewAuthService(
-		auth.AuthServiceConfig{PrivateKey: privateKey, PublicKey: publicKey, AccessTTL: cfg.JWT.AccessTTL, RefreshTTL: cfg.JWT.RefreshTTL},
-		dataStorage,
-		userCache,
+		config.AuthServiceConfig{PrivateKey: cfg.JWT.PrivateKey, PublicKey: cfg.JWT.PublicKey, AccessTTL: cfg.Tokens.AccessTTL, RefreshTTL: cfg.Tokens.RefreshTTL},
+		pgDB,
 		mediaService,
-		data.NewTokenStorage(redis))
-	tweetService := tweets.NewTweetService(dataStorage, mediaService)
-	userService := user.NewUserService(dataStorage, mediaService)
+		tokens.NewTokenStorage(redisClient),
+		elasticRepo)
+	tweetService := tweets.NewTweetService(pgDB, mediaService, elasticRepo)
+	userService := user.NewUserService(pgDB, mediaService, elasticRepo)
+	feedService := feed.NewFeedService(pgDB, tweetService)
+	searchService := search.NewSearchService(elasticRepo, pgDB)
 
-	//Init handler
-	handler := http.NewHandler(
+	handler := httpHandler.NewHandler(
 		authService,
 		tweetService,
 		userService,
-		authService,
-		authService,
+		searchService,
+		feedService,
 		mediaService,
 	)
-	srv := new(servers.Server)
-	if err := srv.Run(cfg.App.Port, handler.InitRouters()); err != nil {
-		logrus.Fatalf("error occurred while running http server: %s", err.Error())
+
+	srv := &http.Server{
+		Addr:    ":" + cfg.App.Port,
+		Handler: handler.InitRouters(),
 	}
+
+	go func() {
+		logrus.Infof("Starting server on port %s", cfg.App.Port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logrus.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	logrus.Info("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		logrus.Fatal("Server forced to shutdown:", err)
+	}
+	logrus.Info("Closing database connection...")
+	if err := postgresConnect.Close(); err != nil {
+		logrus.Errorf("Error closing DB: %v", err)
+	}
+
+	logrus.Info("Closing redis connection...")
+	if err := redisClient.Close(); err != nil {
+		logrus.Errorf("Error closing Redis: %v", err)
+	}
+
+	logrus.Info("Server exiting")
 }

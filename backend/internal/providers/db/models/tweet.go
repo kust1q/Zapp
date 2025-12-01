@@ -24,3 +24,9 @@ type Like struct {
 	UserID  int `db:"user_id"`
 	TweetID int `db:"tweet_id"`
 }
+
+type Counters struct {
+	ReplyCount   int
+	RetweetCount int
+	LikeCount    int
+}

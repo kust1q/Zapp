@@ -6,47 +6,9 @@ import (
 	"time"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
+	"github.com/sirupsen/logrus"
 )
 
-/*
-	func (s *tweetService) CreateTweet(ctx context.Context, userID int, tweet *dto.CreateTweetRequest) (*dto.TweetResponse, error) {
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		domainTweet := entity.Tweet{
-			UserID:    userID,
-			Content:   tweet.Content,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
-
-		createdTweet, err := s.db.CreateTweet(ctx, &domainTweet)
-		if err != nil {
-			return &dto.TweetResponse{}, fmt.Errorf("tweet creation failed: %w", err)
-		}
-
-		author, err := s.db.GetUserByID(ctx, userID)
-		if err != nil {
-			return &dto.TweetResponse{}, fmt.Errorf("failed to get tweet author")
-		}
-
-		avatar, err := s.media.GetAvatarUrlByUserID(ctx, userID)
-		if err != nil {
-			return &dto.TweetResponse{}, fmt.Errorf("failed to get user avatar")
-		}
-
-		return &dto.TweetResponse{
-			ID:        createdTweet.ID,
-			Content:   createdTweet.Content,
-			CreatedAt: createdTweet.CreatedAt,
-			UpdatedAt: createdTweet.UpdatedAt,
-			Author: dto.SmallUserResponse{
-				ID:        author.ID,
-				Username:  author.Username,
-				AvatarURL: avatar,
-			},
-		}, nil
-	}
-*/
 func (s *tweetService) CreateTweet(ctx context.Context, tweet *entity.Tweet) (*entity.Tweet, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -70,41 +32,26 @@ func (s *tweetService) CreateTweet(ctx context.Context, tweet *entity.Tweet) (*e
 		}
 	}
 
-	author, err := s.db.GetUserByID(ctx, tweet.Author.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get tweet author: %w", err)
-	}
+	createdTweet.MediaUrl = mediaUrl
 
-	avatarUrl, err := s.media.GetAvatarUrlByUserID(ctx, tweet.Author.ID)
+	response, err := s.BuildEntityTweetToResponse(ctx, createdTweet)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user avatar: %w", err)
-	}
-
-	likes, retweets, replies, err := s.db.GetCounts(ctx, createdTweet.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get counters: %w", err)
+		return nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit transaction failed: %w", err)
 	}
 
-	return &entity.Tweet{
-		ID:            createdTweet.ID,
-		ParentTweetID: createdTweet.ParentTweetID,
-		Content:       createdTweet.Content,
-		CreatedAt:     createdTweet.CreatedAt,
-		UpdatedAt:     createdTweet.UpdatedAt,
-		MediaUrl:      mediaUrl,
-		Author: &entity.SmallUser{
-			ID:        author.ID,
-			Username:  author.Username,
-			AvatarURL: avatarUrl,
-		},
-		Counters: &entity.Counters{
-			ReplyCount:   replies,
-			RetweetCount: retweets,
-			LikeCount:    likes,
-		},
-	}, nil
+	go func(t *entity.Tweet) {
+		cntx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := s.search.IndexTweet(cntx, t); err != nil {
+			logrus.WithError(err).
+				WithField("tweet_id", t.ID).
+				Warn("failed to index tweet in elastic")
+		}
+	}(createdTweet)
+
+	return response, nil
 }

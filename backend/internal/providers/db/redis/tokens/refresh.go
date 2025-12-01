@@ -9,7 +9,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (s *tokenStorage) StoreRefresh(ctx context.Context, refreshToken, userID string, ttl time.Duration) error {
+func (s *tokensDB) StoreRefresh(ctx context.Context, refreshToken, userID string, ttl time.Duration) error {
 	refreshKey, err := s.buildRefreshKey(refreshToken)
 	if err != nil {
 		return err
@@ -23,7 +23,7 @@ func (s *tokenStorage) StoreRefresh(ctx context.Context, refreshToken, userID st
 	return err
 }
 
-func (s *tokenStorage) GetUserIdByRefreshToken(ctx context.Context, refreshToken string) (string, error) {
+func (s *tokensDB) GetUserIdByRefreshToken(ctx context.Context, refreshToken string) (string, error) {
 	refreshKey, err := s.buildRefreshKey(refreshToken)
 	if err != nil {
 		return "", err
@@ -38,7 +38,7 @@ func (s *tokenStorage) GetUserIdByRefreshToken(ctx context.Context, refreshToken
 	return userID, nil
 }
 
-func (s *tokenStorage) RemoveRefresh(ctx context.Context, refreshToken string) error {
+func (s *tokensDB) RemoveRefresh(ctx context.Context, refreshToken string) error {
 	userID, err := s.GetUserIdByRefreshToken(ctx, refreshToken)
 	if userID == "" {
 		return nil
@@ -57,7 +57,7 @@ func (s *tokenStorage) RemoveRefresh(ctx context.Context, refreshToken string) e
 	return err
 }
 
-func (s *tokenStorage) CloseAllSessions(ctx context.Context, userID string) error {
+func (s *tokensDB) CloseAllSessions(ctx context.Context, userID string) error {
 	tokens, err := s.redis.SMembers(ctx, s.buildSessionKey(userID)).Result()
 	if err != nil {
 		return err
@@ -75,7 +75,7 @@ func (s *tokenStorage) CloseAllSessions(ctx context.Context, userID string) erro
 	return err
 }
 
-func (s *tokenStorage) buildRefreshKey(refreshToken string) (string, error) {
+func (s *tokensDB) buildRefreshKey(refreshToken string) (string, error) {
 	refreshHash, err := bcrypt.GenerateFromPassword([]byte(refreshToken), bcrypt.DefaultCost)
 	if err != nil {
 		return "", fmt.Errorf("failed to hash refresh token: %w", err)
@@ -83,6 +83,6 @@ func (s *tokenStorage) buildRefreshKey(refreshToken string) (string, error) {
 	return prefixRefreshToken + string(refreshHash), nil
 }
 
-func (s *tokenStorage) buildSessionKey(userID string) string {
+func (s *tokensDB) buildSessionKey(userID string) string {
 	return prefixUserSessions + userID
 }

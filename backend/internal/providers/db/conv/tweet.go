@@ -104,3 +104,11 @@ func FromLikeModelToDomainList(likes []models.Like) []entity.Like {
 	}
 	return res
 }
+
+func FromCountersModelToDomain(counters *models.Counters) *entity.Counters {
+	return &entity.Counters{
+		ReplyCount:   counters.ReplyCount,
+		RetweetCount: counters.RetweetCount,
+		LikeCount:    counters.LikeCount,
+	}
+}

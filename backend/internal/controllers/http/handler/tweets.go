@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	conv "github.com/kust1q/Zapp/backend/internal/controllers/http/conv"
 	"github.com/kust1q/Zapp/backend/internal/controllers/http/dto/request"
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
-	conv "github.com/kust1q/Zapp/backend/internal/pkg/conv/dto"
 	"github.com/sirupsen/logrus"
 )
 

@@ -3,7 +3,6 @@ package minio
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,22 +11,9 @@ import (
 	"time"
 
 	"github.com/kust1q/Zapp/backend/internal/config"
+	"github.com/kust1q/Zapp/backend/internal/domain/entity"
+	"github.com/kust1q/Zapp/backend/internal/errs"
 	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
-)
-
-var (
-	ErrFileTooLarge     = errors.New("file too large")
-	ErrInvalidMediaType = errors.New("invalid media type")
-)
-
-type MediaType string
-
-const (
-	TypeImage MediaType = "image"
-	TypeVideo MediaType = "video"
-	TypeAudio MediaType = "audio"
-	TypeGIF   MediaType = "gif"
 )
 
 type MediaPolicy struct {
@@ -40,46 +26,18 @@ type MediaPolicy struct {
 type MinioDB struct {
 	client        *minio.Client
 	config        *config.MinioConfig
-	mediaPolicies map[MediaType]MediaPolicy
+	mediaPolicies map[entity.MediaType]MediaPolicy
 }
 
-func NewMinioDB(config *config.MinioConfig, mediaPolicies map[MediaType]MediaPolicy) (*MinioDB, error) {
-	client, err := minio.New(config.Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(config.User, config.Password, ""),
-		Secure: config.UseSSL,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create minio client: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	_, err = client.ListBuckets(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("minio server unavailable: %w", err)
-	}
-
-	exists, err := client.BucketExists(ctx, config.BucketName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check bucket existence: %w", err)
-	}
-
-	if !exists {
-		err := client.MakeBucket(ctx, config.BucketName, minio.MakeBucketOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create bucket: %w", err)
-		}
-	}
-
+func NewMinioDB(client *minio.Client, config *config.MinioConfig, mediaPolicies map[entity.MediaType]MediaPolicy) *MinioDB {
 	return &MinioDB{
 		client:        client,
 		config:        config,
 		mediaPolicies: mediaPolicies,
-	}, nil
+	}
 }
 
-func (s *MinioDB) Upload(ctx context.Context, file io.Reader, mediaType MediaType, filename string) (path string, mimeType string, err error) {
+func (s *MinioDB) Upload(ctx context.Context, file io.Reader, mediaType entity.MediaType, filename string) (path string, mimeType string, err error) {
 	config, ok := s.mediaPolicies[mediaType]
 	if !ok {
 		return "", "", fmt.Errorf("unsupported media type: %s", mediaType)
@@ -154,7 +112,7 @@ func (s *MinioDB) readAndValidate(reader io.Reader, ext string, policy MediaPoli
 	}
 
 	if int64(len(data)) > policy.MaxSize {
-		return nil, ErrFileTooLarge
+		return nil, errs.ErrFileTooLarge
 	}
 
 	detectedType := http.DetectContentType(data)

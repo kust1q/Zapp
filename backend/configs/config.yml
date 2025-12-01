@@ -3,17 +3,11 @@ port: 8080
 db:
   host: "localhost"
   port: 5432
-  user: ${POSTGRES_USER}
-  password: ${POSTGRES_PASSWORD}
-  name: ${POSTGRES_DB}
-  url: ${DB_URL}
   sslmode: "disable"
 
 minio:
-  endpoint: "localhost:9001"
-  port: 9001
-  user: ${MINIO_USER}
-  password: ${MINIO_PASSWORD}
+  endpoint: "localhost:9000"
+  port: 9000
   sslmode: false
   bucketname: "objects"
   ttl: 24h
@@ -21,18 +15,17 @@ minio:
 redis:
   host: "localhost"
   port: 6379
-  password: ${REDIS_PASSWORD}
   db: 0
-  
-cache:
-  secret: ${HASH_SECRET}
-  ttl: 24h
 
-jwt:
-  privatePath: ${PRIVATE_KEY_PATH}
-  publicPath: ${PUBLIC_KEY_PATH}
+elastic:
+  host: "127.0.0.1"
+  port: 9200
+
+cache:
+  defaultTtl: 24h
+  countersTtl: 30s
 
 tokens:
-  accessTTL: 15m
+  accessTTL: 720h # Поменять
   refreshTTL: 720h
   recoveryTTL: 15m

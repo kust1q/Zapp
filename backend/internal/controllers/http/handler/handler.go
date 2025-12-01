@@ -63,13 +63,12 @@ func (h *Handler) InitRouters() *gin.Engine {
 		public.GET("/tweets/:tweet_id/replies", h.getReplies)
 		public.GET("/tweets/:tweet_id/likes", h.getLikes)
 		public.GET("/tweets/media/:tweet_id", h.getTweetMedia)
-		public.GET("/tweets/search", h.searchTweets)
 		public.GET("/users/:username/profile", h.getUserProfile)
 		public.GET("/users/:username/tweets", h.getTweetsAndRetweetsByUsername)
 		public.GET("/users/:username/followers", h.followers)
 		public.GET("/users/:username/following", h.following)
 		public.GET("/users/avatar/:user_id", h.getAvatar)
-		public.GET("/users/search", h.searchUsers)
+		public.GET("/search", h.search)
 	}
 
 	protected := api.Group("/protected", h.authMiddleware)
@@ -90,7 +89,7 @@ func (h *Handler) InitRouters() *gin.Engine {
 			tweets.POST("/:tweet_id/retweet", h.retweet)
 			tweets.DELETE("/:tweet_id/retweet", h.deleteRetweet)
 
-			tweets.DELETE("/:tweet_id", h.deleteTweetMedia)
+			tweets.DELETE("/:tweet_id/media", h.deleteTweetMedia)
 		}
 
 		users := protected.Group("/users")
@@ -102,7 +101,7 @@ func (h *Handler) InitRouters() *gin.Engine {
 			users.DELETE("/:user_id/follow", h.unfollowUser)
 		}
 
-		protected.GET("/feed", h.getFeed)
+		protected.GET("/", h.getFeed)
 	}
 
 	router.GET("/health", func(c *gin.Context) {

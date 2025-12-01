@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY, 
     username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(64) UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
+    password TEXT NOT NULL,
     bio VARCHAR(100) DEFAULT '',
     gen VARCHAR(10) DEFAULT 'male' NOT NULL,
     is_active BOOLEAN DEFAULT TRUE NOT NULL,

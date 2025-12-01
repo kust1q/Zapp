@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
+	"github.com/kust1q/Zapp/backend/internal/errs"
 	"github.com/sirupsen/logrus"
 )
 
@@ -21,8 +22,8 @@ func (s *authService) Refresh(ctx context.Context, req *entity.Refresh) (*entity
 
 	userID, err := s.tokens.GetUserIdByRefreshToken(ctx, req.Refresh)
 	if err != nil {
-		if errors.Is(err, ErrTokenNotFound) {
-			return nil, ErrInvalidRefreshToken
+		if errors.Is(err, errs.ErrTokenNotFound) {
+			return nil, errs.ErrInvalidRefreshToken
 		}
 		return nil, fmt.Errorf("failed to get refresh token: %w", err)
 	}
@@ -39,7 +40,7 @@ func (s *authService) Refresh(ctx context.Context, req *entity.Refresh) (*entity
 	user, err := s.db.GetUserByID(ctx, userIntID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrUserNotFound
+			return nil, errs.ErrUserNotFound
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}

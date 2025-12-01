@@ -24,8 +24,8 @@ type tweetStorage interface {
 	DeleteRetweet(ctx context.Context, userID, retweetID int) error
 	GetRepliesToTweet(ctx context.Context, parentTweetID int) ([]entity.Tweet, error)
 	GetTweetsAndRetweetsByUsername(ctx context.Context, username string) ([]entity.Tweet, error)
-	GetCounts(ctx context.Context, tweetID int) (likes, retweets, replies int, err error)
-	GetLikes(ctx context.Context, tweetID int) ([]entity.Like, error)
+	GetCounts(ctx context.Context, tweetID int) (*entity.Counters, error)
+	GetLikes(ctx context.Context, tweetID int) ([]entity.SmallUser, error)
 
 	GetUserByID(ctx context.Context, userID int) (*entity.User, error)
 }
@@ -35,6 +35,12 @@ type mediaService interface {
 	GetMediaUrlByTweetID(ctx context.Context, tweetID int) (string, error)
 	GetAvatarUrlByUserID(ctx context.Context, userID int) (string, error)
 	DeleteTweetMedia(ctx context.Context, tweetID, userID int) error
+	GetPresignedURL(ctx context.Context, path string) (string, error)
+}
+
+type searchRepository interface {
+	IndexTweet(ctx context.Context, tweet *entity.Tweet) error
+	DeleteTweet(ctx context.Context, tweetID int) error
 }
 
 var (
@@ -44,23 +50,20 @@ var (
 )
 
 type tweetService struct {
-	db    tweetStorage
-	media mediaService
+	db     tweetStorage
+	media  mediaService
+	search searchRepository
 }
 
-func NewTweetService(db tweetStorage, media mediaService) *tweetService {
+func NewTweetService(db tweetStorage, media mediaService, search searchRepository) *tweetService {
 	return &tweetService{
-		db:    db,
-		media: media,
+		db:     db,
+		media:  media,
+		search: search,
 	}
 }
 
-func (s *tweetService) buildEntityTweetToResponse(ctx context.Context, tweet *entity.Tweet) (*entity.Tweet, error) {
-	mediaUrl, err := s.media.GetMediaUrlByTweetID(ctx, tweet.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get tweet media url")
-	}
-
+func (s *tweetService) BuildEntityTweetToResponse(ctx context.Context, tweet *entity.Tweet) (*entity.Tweet, error) {
 	author, err := s.db.GetUserByID(ctx, tweet.Author.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tweet author: %w", err)
@@ -71,7 +74,7 @@ func (s *tweetService) buildEntityTweetToResponse(ctx context.Context, tweet *en
 		return nil, fmt.Errorf("failed to get user avatar: %w", err)
 	}
 
-	likes, retweets, replies, err := s.db.GetCounts(ctx, tweet.ID)
+	counts, err := s.db.GetCounts(ctx, tweet.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get counters: %w", err)
 	}
@@ -82,16 +85,12 @@ func (s *tweetService) buildEntityTweetToResponse(ctx context.Context, tweet *en
 		Content:       tweet.Content,
 		CreatedAt:     tweet.CreatedAt,
 		UpdatedAt:     tweet.UpdatedAt,
-		MediaUrl:      mediaUrl,
+		MediaUrl:      tweet.MediaUrl,
 		Author: &entity.SmallUser{
 			ID:        author.ID,
 			Username:  author.Username,
 			AvatarURL: avatarUrl,
 		},
-		Counters: &entity.Counters{
-			ReplyCount:   replies,
-			RetweetCount: retweets,
-			LikeCount:    likes,
-		},
+		Counters: counts,
 	}, nil
 }

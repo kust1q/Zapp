@@ -5,9 +5,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	conv "github.com/kust1q/Zapp/backend/internal/controllers/http/conv"
 	"github.com/kust1q/Zapp/backend/internal/controllers/http/dto/request"
-	conv "github.com/kust1q/Zapp/backend/internal/pkg/conv/dto"
-	"github.com/kust1q/Zapp/backend/internal/service/auth"
+	"github.com/kust1q/Zapp/backend/internal/errs"
 	"github.com/sirupsen/logrus"
 )
 
@@ -20,14 +20,14 @@ func (h *Handler) signUp(c *gin.Context) {
 	}
 	user, err := h.authService.SignUp(c.Request.Context(), conv.FromSignUpRequestToDomain(&req))
 	if err != nil {
-		if errors.Is(err, auth.ErrEmailAlreadyUsed) {
+		if errors.Is(err, errs.ErrEmailAlreadyUsed) {
 			logrus.WithField("email", req.Email).Warn("sign up failed - email already used")
 			c.JSON(http.StatusConflict, gin.H{
 				"error": "email already used",
 			})
 			return
 		}
-		if errors.Is(err, auth.ErrUsernameAlreadyUsed) {
+		if errors.Is(err, errs.ErrUsernameAlreadyUsed) {
 			logrus.WithField("username", req.Username).Warn("sign up failed - username already used")
 			c.JSON(http.StatusConflict, gin.H{
 				"error": "username already used",
@@ -59,7 +59,7 @@ func (h *Handler) signIn(c *gin.Context) {
 	}
 	tokens, err := h.authService.SignIn(c.Request.Context(), conv.FromSignInRequestToDomain(&req))
 	if err != nil {
-		if errors.Is(err, auth.ErrInvalidCredentials) {
+		if errors.Is(err, errs.ErrInvalidCredentials) {
 			logrus.WithField("email", req.Email).Warn("sign in failed - invalid credentials")
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "invalid credentials",
@@ -101,14 +101,14 @@ func (h *Handler) refresh(c *gin.Context) {
 
 	tokens, err := h.authService.Refresh(c.Request.Context(), conv.FromRefreshRequestToDomain(refreshToken))
 	if err != nil {
-		if errors.Is(err, auth.ErrTokenNotFound) || errors.Is(err, auth.ErrInvalidRefreshToken) {
+		if errors.Is(err, errs.ErrTokenNotFound) || errors.Is(err, errs.ErrInvalidRefreshToken) {
 			c.SetCookie(RefreshTokenCookieName, "", -1, "/", "", false, true)
 			logrus.Warn("token refresh failed - invalid token, cookie removed")
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "unauthorized",
 			})
 			return
-		} else if errors.Is(err, auth.ErrUserNotFound) {
+		} else if errors.Is(err, errs.ErrUserNotFound) {
 			logrus.Warn("token refresh failed - user not found")
 			c.JSON(http.StatusForbidden, gin.H{
 				"error": "forbidden",

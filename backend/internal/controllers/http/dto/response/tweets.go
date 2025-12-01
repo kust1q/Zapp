@@ -11,7 +11,7 @@ type (
 		CreatedAt     time.Time  `json:"created_at"`
 		UpdatedAt     time.Time  `json:"updated_at"`
 		ParentTweetID *int       `json:"parent_tweet_id,omitempty"`
-		MediaURL      string     `json:"media_url,omitempty"`
+		MediaURL      string     `json:"media_url"`
 		Author        *SmallUser `json:"author"`
 		Counters      *Counters  `json:"counters"`
 	}

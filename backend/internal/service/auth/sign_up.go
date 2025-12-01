@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
-	"github.com/kust1q/Zapp/backend/internal/providers/db/redis/cache"
+	"github.com/kust1q/Zapp/backend/internal/errs"
 	"github.com/o1egl/govatar"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
@@ -63,34 +63,25 @@ func (s *authService) SignUp(ctx context.Context, req *entity.User) (*entity.Use
 		return nil, fmt.Errorf("failed to generate or upload avatar: %w", err)
 	}
 
-	avatarURL, err := s.media.GetPresignedURL(ctx, avatar.Path)
-	if err != nil {
-		return nil, fmt.Errorf("get avatar presigned url failed: %w", err)
-	}
-
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit transaction failed: %w", err)
 	}
 
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	go func(u *entity.User) {
+		cntx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-
-		if err := s.cache.Add(ctx, cache.EmailType, req.Credential.Email); err != nil {
-			logrus.Warnf("failed to cache email for user %s: %v", req.Username, err)
+		if err := s.search.IndexUser(cntx, u); err != nil {
+			logrus.WithError(err).
+				WithField("user_id", u.ID).Warn("failed to index user in elastic")
 		}
-
-		if err := s.cache.Add(ctx, cache.UsernameType, req.Username); err != nil {
-			logrus.Warnf("failed to cache username for user %s: %v", req.Username, err)
-		}
-	}()
+	}(createdUser)
 
 	return &entity.User{
 		ID:        createdUser.ID,
 		Username:  createdUser.Username,
 		Bio:       createdUser.Bio,
 		Gen:       createdUser.Gen,
-		AvatarURL: avatarURL,
+		AvatarURL: avatar.Path,
 		CreatedAt: createdUser.CreatedAt,
 		Credential: &entity.Credential{
 			Email: createdUser.Credential.Email,
@@ -140,7 +131,7 @@ func (s *authService) generateAndUploadAvatar(ctx context.Context, userID int, u
 func (s *authService) checkUserExists(ctx context.Context, email, username string) error {
 	_, err := s.db.GetUserByEmail(ctx, email)
 	if err == nil {
-		return ErrEmailAlreadyUsed
+		return errs.ErrEmailAlreadyUsed
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("email check failed: %w", err)
@@ -148,7 +139,7 @@ func (s *authService) checkUserExists(ctx context.Context, email, username strin
 
 	_, err = s.db.GetUserByUsername(ctx, username)
 	if err == nil {
-		return ErrUsernameAlreadyUsed
+		return errs.ErrUsernameAlreadyUsed
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("username check failed: %w", err)

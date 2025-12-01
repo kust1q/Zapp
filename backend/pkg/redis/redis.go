@@ -9,7 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func NewRedisClient(cfg config.RedisConfig) (*redis.Client, error) {
+func NewRedisClient(cfg *config.RedisConfig) (*redis.Client, error) {
 	redis := redis.NewClient(
 		&redis.Options{
 			Addr:     fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),

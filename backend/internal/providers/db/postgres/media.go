@@ -6,9 +6,8 @@ import (
 	"fmt"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
-	conv "github.com/kust1q/Zapp/backend/internal/pkg/conv/db"
+	conv "github.com/kust1q/Zapp/backend/internal/providers/db/conv"
 	"github.com/kust1q/Zapp/backend/internal/providers/db/models"
-	"github.com/kust1q/Zapp/backend/internal/storage/postgres"
 )
 
 // UpsertByTweetIdTx
@@ -26,7 +25,7 @@ func (pg *PostgresDB) UpsertByTweetIdTx(ctx context.Context, tx *sql.Tx, media *
             mime_type = EXCLUDED.mime_type,
             size_bytes = EXCLUDED.size_bytes
         RETURNING id
-    `, postgres.TweetMediaTable)
+    `, TweetMediaTable)
 
 	var id int
 	if err := tx.QueryRowContext(ctx, query, mediaModel.TweetID, mediaModel.Path, mediaModel.MimeType, mediaModel.SizeBytes).Scan(&id); err != nil {
@@ -40,7 +39,7 @@ func (pg *PostgresDB) UpsertByTweetIdTx(ctx context.Context, tx *sql.Tx, media *
 }
 
 func (pg *PostgresDB) GetMediaPathByTweetID(ctx context.Context, tweetID int) (string, error) {
-	query := fmt.Sprintf("SELECT path FROM %s WHERE tweet_id = $1", postgres.TweetMediaTable)
+	query := fmt.Sprintf("SELECT path FROM %s WHERE tweet_id = $1", TweetMediaTable)
 	var path string
 	if err := pg.db.GetContext(ctx, &path, query, tweetID); err != nil {
 		return "", err
@@ -49,7 +48,7 @@ func (pg *PostgresDB) GetMediaPathByTweetID(ctx context.Context, tweetID int) (s
 }
 
 func (pg *PostgresDB) GetMediaDataByTweetID(ctx context.Context, tweetID int) (*entity.TweetMedia, error) {
-	query := fmt.Sprintf("SELECT * FROM %s WHERE tweet_id = $1", postgres.TweetMediaTable)
+	query := fmt.Sprintf("SELECT * FROM %s WHERE tweet_id = $1", TweetMediaTable)
 	var mediaModel models.TweetMedia
 	if err := pg.db.GetContext(ctx, &mediaModel, query, tweetID); err != nil {
 		return nil, err
@@ -66,8 +65,8 @@ func (pg *PostgresDB) DeleteMediaByTweetID(ctx context.Context, tweetID, userID 
         AND EXISTS (
             SELECT 1 FROM %s t 
             WHERE t.id = m.tweet_id AND t.user_id = $2)`,
-		postgres.TweetMediaTable,
-		postgres.TweetsTable)
+		TweetMediaTable,
+		TweetsTable)
 
 	result, err := pg.db.ExecContext(ctx, query, tweetID, userID)
 	if err != nil {
@@ -90,10 +89,10 @@ func (pg *PostgresDB) UploadAvatarTx(ctx context.Context, tx *sql.Tx, avatar *en
 		return nil, fmt.Errorf("cannot convert nil entity to DB model")
 	}
 
-	query := fmt.Sprintf("INSERT INTO %s (user_id, path, mime_type, size_bytes) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id) DO NOTHING RETURNING id", postgres.AvatarsTable)
+	query := fmt.Sprintf("INSERT INTO %s (user_id, path, mime_type, size_bytes) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id) DO NOTHING RETURNING id", AvatarsTable)
 	var id int
 	if err := tx.QueryRowContext(ctx, query, avatarModel.UserID, avatarModel.Path, avatarModel.MimeType, avatarModel.SizeBytes).Scan(&id); err != nil {
-		return nil, err // Возвращаем nil и ошибку
+		return nil, err
 	}
 
 	avatarModel.ID = id
@@ -103,7 +102,7 @@ func (pg *PostgresDB) UploadAvatarTx(ctx context.Context, tx *sql.Tx, avatar *en
 }
 
 func (pg *PostgresDB) GetAvatarPathByUserID(ctx context.Context, userID int) (string, error) {
-	query := fmt.Sprintf("SELECT path FROM %s WHERE user_id = $1", postgres.AvatarsTable)
+	query := fmt.Sprintf("SELECT path FROM %s WHERE user_id = $1", AvatarsTable)
 	var path string
 	if err := pg.db.GetContext(ctx, &path, query, userID); err != nil {
 		return "", err
@@ -112,7 +111,7 @@ func (pg *PostgresDB) GetAvatarPathByUserID(ctx context.Context, userID int) (st
 }
 
 func (pg *PostgresDB) GetAvatarDataByUserID(ctx context.Context, userID int) (*entity.Avatar, error) {
-	query := fmt.Sprintf("SELECT * FROM %s WHERE user_id = $1", postgres.AvatarsTable)
+	query := fmt.Sprintf("SELECT * FROM %s WHERE user_id = $1", AvatarsTable)
 	var avatarModel models.Avatar
 	if err := pg.db.GetContext(ctx, &avatarModel, query, userID); err != nil {
 		return nil, err
@@ -123,7 +122,7 @@ func (pg *PostgresDB) GetAvatarDataByUserID(ctx context.Context, userID int) (*e
 }
 
 func (pg *PostgresDB) DeleteAvatarByUserID(ctx context.Context, userID int) error {
-	query := fmt.Sprintf("DELETE FROM %s WHERE user_id = $1", postgres.AvatarsTable)
+	query := fmt.Sprintf("DELETE FROM %s WHERE user_id = $1", AvatarsTable)
 	result, err := pg.db.ExecContext(ctx, query, userID)
 	if err != nil {
 		return err
