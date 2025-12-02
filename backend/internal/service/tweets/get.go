@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
+	"github.com/kust1q/Zapp/backend/internal/errs"
 )
 
 func (s *tweetService) GetTweetById(ctx context.Context, tweetID int) (*entity.Tweet, error) {
@@ -16,7 +17,7 @@ func (s *tweetService) GetTweetById(ctx context.Context, tweetID int) (*entity.T
 	tweet, err := s.db.GetTweetById(ctx, tweetID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrTweetNotFound
+			return nil, errs.ErrTweetNotFound
 		}
 		return nil, fmt.Errorf("failed to get tweet by id: %w", err)
 	}

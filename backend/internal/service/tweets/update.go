@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
+	"github.com/kust1q/Zapp/backend/internal/errs"
 	"github.com/sirupsen/logrus"
 )
 
@@ -18,13 +19,13 @@ func (s *tweetService) UpdateTweet(ctx context.Context, req *entity.Tweet) (*ent
 	exTweet, err := s.db.GetTweetById(ctx, req.ID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrTweetNotFound
+			return nil, errs.ErrTweetNotFound
 		}
 		return nil, fmt.Errorf("failed to get tweet by id: %w", err)
 	}
 
 	if exTweet.Author.ID != req.Author.ID {
-		return nil, ErrUnauthorizedUpdate
+		return nil, errs.ErrUnauthorizedUpdate
 	}
 
 	tx, err := s.db.BeginTx(ctx)
