@@ -10,12 +10,14 @@ import (
 type searchService struct {
 	db     searchStorage
 	search searchRepository
+	media  mediaService
 }
 
-func NewSearchService(search searchRepository, db searchStorage) *searchService {
+func NewSearchService(db searchStorage, search searchRepository, media mediaService) *searchService {
 	return &searchService{
 		db:     db,
 		search: search,
+		media:  media,
 	}
 }
 
@@ -28,7 +30,21 @@ func (s *searchService) SearchTweets(ctx context.Context, query string) ([]entit
 		return []entity.Tweet{}, nil
 	}
 
-	return s.db.GetTweetsByIDs(ctx, ids)
+	tweets, err := s.db.GetTweetsByIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tweets by ids: %w", err)
+	}
+
+	for i := range tweets {
+		if tweets[i].MediaUrl != "" {
+			tweets[i].MediaUrl, err = s.media.GetMediaUrlByTweetID(ctx, tweets[i].ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get tweet media by id: %w", err)
+			}
+		}
+	}
+
+	return tweets, nil
 }
 
 func (s *searchService) SearchUsers(ctx context.Context, query string) ([]entity.User, error) {
@@ -40,5 +56,17 @@ func (s *searchService) SearchUsers(ctx context.Context, query string) ([]entity
 		return []entity.User{}, nil
 	}
 
-	return s.db.GetUsersByIDs(ctx, ids)
+	users, err := s.db.GetUsersByIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get users by ids: %w", err)
+	}
+
+	for i := range users {
+		users[i].AvatarUrl, err = s.media.GetAvatarUrlByUserID(ctx, users[i].ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get user avatar by id: %w", err)
+		}
+	}
+
+	return users, nil
 }

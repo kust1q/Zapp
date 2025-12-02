@@ -49,6 +49,9 @@ func (pg *PostgresDB) GetUserByEmail(ctx context.Context, email string) (*entity
 	var userModel models.User
 	err = pg.db.GetContext(ctx, &userModel, query, email)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errs.ErrUserNotFound
+		}
 		return nil, err
 	}
 
@@ -77,6 +80,9 @@ func (pg *PostgresDB) GetUserByUsername(ctx context.Context, username string) (*
 	var userModel models.User
 	err = pg.db.GetContext(ctx, &userModel, query, username)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errs.ErrUserNotFound
+		}
 		return nil, err
 	}
 
@@ -102,6 +108,9 @@ func (pg *PostgresDB) GetUserByID(ctx context.Context, userID int) (*entity.User
 	var userModel models.User
 	err = pg.db.GetContext(ctx, &userModel, query, userID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errs.ErrUserNotFound
+		}
 		return nil, err
 	}
 
@@ -117,19 +126,32 @@ func (pg *PostgresDB) GetUserByID(ctx context.Context, userID int) (*entity.User
 
 func (pg *PostgresDB) UpdateUserPassword(ctx context.Context, userID int, password string) error {
 	query := fmt.Sprintf("UPDATE %s SET password = $1 WHERE id = $2", UserTable)
-	_, err := pg.db.ExecContext(ctx, query, password, userID)
+	result, err := pg.db.ExecContext(ctx, query, password, userID)
 	if err != nil {
 		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return errs.ErrUserNotFound
 	}
 	return pg.Cache.InvalidateUser(ctx, userID)
 }
 
-// UpdateUserBio
 func (pg *PostgresDB) UpdateUserBio(ctx context.Context, userID int, bio string) error {
 	query := fmt.Sprintf("UPDATE %s SET bio = $1 WHERE id = $2", UserTable)
-	_, err := pg.db.ExecContext(ctx, query, bio, userID)
+	result, err := pg.db.ExecContext(ctx, query, bio, userID)
 	if err != nil {
 		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return errs.ErrUserNotFound
 	}
 	return pg.Cache.InvalidateUser(ctx, userID)
 }
@@ -163,8 +185,26 @@ func (pg *PostgresDB) UserExistsByUsername(ctx context.Context, username string)
 }
 
 func (pg *PostgresDB) FollowToUser(ctx context.Context, followerID, followingID int, createdAt time.Time) (*entity.Follow, error) {
+	var followerExists, followingExists bool
+	checkQuery := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE id = $1)", UserTable)
+	err := pg.db.QueryRowContext(ctx, checkQuery, followerID).Scan(&followerExists)
+	if err != nil {
+		return nil, err
+	}
+	if !followerExists {
+		return nil, errs.ErrUserNotFound
+	}
+
+	err = pg.db.QueryRowContext(ctx, checkQuery, followingID).Scan(&followingExists)
+	if err != nil {
+		return nil, err
+	}
+	if !followingExists {
+		return nil, errs.ErrUserNotFound
+	}
+
 	query := fmt.Sprintf("INSERT INTO %s (follower_id, following_id, created_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", FollowsTable)
-	_, err := pg.db.ExecContext(ctx, query, followerID, followingID, createdAt)
+	_, err = pg.db.ExecContext(ctx, query, followerID, followingID, createdAt)
 	if err != nil {
 		return nil, err
 	}
@@ -178,6 +218,24 @@ func (pg *PostgresDB) FollowToUser(ctx context.Context, followerID, followingID 
 }
 
 func (pg *PostgresDB) UnfollowUser(ctx context.Context, followerID, followingID int) error {
+	var followerExists, followingExists bool
+	checkQuery := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE id = $1)", UserTable)
+	err := pg.db.QueryRowContext(ctx, checkQuery, followerID).Scan(&followerExists)
+	if err != nil {
+		return err
+	}
+	if !followerExists {
+		return errs.ErrUserNotFound
+	}
+
+	err = pg.db.QueryRowContext(ctx, checkQuery, followingID).Scan(&followingExists)
+	if err != nil {
+		return err
+	}
+	if !followingExists {
+		return errs.ErrUserNotFound
+	}
+
 	query := fmt.Sprintf("DELETE FROM %s WHERE follower_id = $1 AND following_id = $2", FollowsTable)
 	result, err := pg.db.ExecContext(ctx, query, followerID, followingID)
 	if err != nil {
@@ -188,12 +246,22 @@ func (pg *PostgresDB) UnfollowUser(ctx context.Context, followerID, followingID 
 		return err
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("follow not found")
+		return errs.ErrUserNotFound
 	}
 	return nil
 }
 
 func (pg *PostgresDB) GetFollowersIds(ctx context.Context, username string) ([]int, error) {
+	var userExists bool
+	checkQuery := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE username = $1)", UserTable)
+	err := pg.db.QueryRowContext(ctx, checkQuery, username).Scan(&userExists)
+	if err != nil {
+		return nil, err
+	}
+	if !userExists {
+		return nil, errs.ErrUserNotFound
+	}
+
 	query := fmt.Sprintf(`
         SELECT f.follower_id
         FROM %s f
@@ -209,6 +277,16 @@ func (pg *PostgresDB) GetFollowersIds(ctx context.Context, username string) ([]i
 }
 
 func (pg *PostgresDB) GetFollowingsIds(ctx context.Context, username string) ([]int, error) {
+	var userExists bool
+	checkQuery := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE username = $1)", UserTable)
+	err := pg.db.QueryRowContext(ctx, checkQuery, username).Scan(&userExists)
+	if err != nil {
+		return nil, err
+	}
+	if !userExists {
+		return nil, errs.ErrUserNotFound
+	}
+
 	query := fmt.Sprintf(`
         SELECT f.following_id
         FROM %s f
@@ -234,7 +312,7 @@ func (pg *PostgresDB) DeleteUser(ctx context.Context, userID int) error {
 		return err
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("user not found")
+		return errs.ErrUserNotFound
 	}
 
 	return pg.Cache.InvalidateUser(ctx, userID)

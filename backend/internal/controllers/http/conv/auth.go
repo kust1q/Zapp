@@ -40,7 +40,6 @@ func FromSignInRequestToDomain(req *request.SignIn) *entity.Credential {
 }
 
 func FromRefreshRequestToDomain(refreshToken string) *entity.Refresh {
-	// refreshToken - строка, не может быть nil, но можем проверить на пустоту
 	if refreshToken == "" {
 		return nil
 	}
@@ -89,7 +88,6 @@ func FromDomainToSignUpResponse(user *entity.User) *response.SignUp {
 		return nil
 	}
 
-	// Добавляем проверку на nil для Credential
 	var email string
 	if user.Credential != nil {
 		email = user.Credential.Email
@@ -101,7 +99,7 @@ func FromDomainToSignUpResponse(user *entity.User) *response.SignUp {
 		Email:     email,
 		Bio:       user.Bio,
 		Gen:       user.Gen,
-		AvatarURL: user.AvatarURL,
+		AvatarURL: user.AvatarUrl,
 		CreatedAt: user.CreatedAt,
 	}
 }

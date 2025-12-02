@@ -38,10 +38,6 @@ func FromTweetModelToDomain(tweet *models.Tweet) *entity.Tweet {
 }
 
 func FromTweetModelToDomainList(tweetsModels []models.Tweet) []entity.Tweet {
-	if tweetsModels == nil {
-		return nil
-	}
-
 	tweets := make([]entity.Tweet, 0, len(tweetsModels))
 	for _, tweet := range tweetsModels {
 		tweets = append(tweets, *FromTweetModelToDomain(&tweet))

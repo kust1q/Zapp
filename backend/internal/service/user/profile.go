@@ -34,7 +34,7 @@ func (s *userService) GetUserProfile(ctx context.Context, username string) (*ent
 		return nil, fmt.Errorf("failed to get avatar by user id: %w", err)
 	}
 
-	user.AvatarURL = avatarURL
+	user.AvatarUrl = avatarURL
 
 	tweets, err := s.db.GetTweetsAndRetweetsByUsername(ctx, user.Username)
 	if err != nil {
@@ -44,11 +44,13 @@ func (s *userService) GetUserProfile(ctx context.Context, username string) (*ent
 	}
 
 	for i := range tweets {
-		mediaUrl, err := s.media.GetMediaUrlByTweetID(ctx, tweets[i].ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get tweet media url")
+		if tweets[i].MediaUrl != "" {
+			mediaUrl, err := s.media.GetMediaUrlByTweetID(ctx, tweets[i].ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get tweet media url")
+			}
+			tweets[i].MediaUrl = mediaUrl
 		}
-		tweets[i].MediaUrl = mediaUrl
 
 		author, err := s.db.GetUserByID(ctx, tweets[i].Author.ID)
 		if err != nil {
@@ -63,7 +65,7 @@ func (s *userService) GetUserProfile(ctx context.Context, username string) (*ent
 		tweets[i].Author = &entity.SmallUser{
 			ID:        author.ID,
 			Username:  author.Username,
-			AvatarURL: avatarUrl,
+			AvatarUrl: avatarUrl,
 		}
 
 		counts, err := s.db.GetCounts(ctx, tweets[i].ID)

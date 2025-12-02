@@ -46,7 +46,7 @@ func (s *userService) GetFollowers(ctx context.Context, username string) ([]enti
 		users = append(users, entity.SmallUser{
 			ID:        user.ID,
 			Username:  user.Username,
-			AvatarURL: avatarURL,
+			AvatarUrl: avatarURL,
 		})
 	}
 
@@ -77,7 +77,7 @@ func (s *userService) GetFollowings(ctx context.Context, username string) ([]ent
 		users = append(users, entity.SmallUser{
 			ID:        user.ID,
 			Username:  user.Username,
-			AvatarURL: avatarURL,
+			AvatarUrl: avatarURL,
 		})
 	}
 

@@ -50,7 +50,7 @@ type (
 		CreatedAt   time.Time
 		IsSuperuser bool
 		IsActive    bool
-		AvatarURL   string
+		AvatarUrl   string
 		Credential  *Credential
 	}
 
@@ -74,7 +74,7 @@ type (
 	SmallUser struct {
 		ID        int
 		Username  string
-		AvatarURL string
+		AvatarUrl string
 	}
 
 	SecuritySettingsUpdate struct {

@@ -59,7 +59,6 @@ func FromDomainToTweetResponse(tweet *entity.Tweet) *response.Tweet {
 		Author:        FromDomainToSmallUserResponse(tweet.Author),
 	}
 
-	// Добавляем счетчики только если они не nil
 	if tweet.Counters != nil {
 		responseTweet.Counters = &response.Counters{
 			ReplyCount:   tweet.Counters.ReplyCount,
@@ -70,25 +69,6 @@ func FromDomainToTweetResponse(tweet *entity.Tweet) *response.Tweet {
 
 	return responseTweet
 }
-
-/*
-func FromDomainToLikesListResponse(users []entity.SmallUser) []response.UserLike {
-    if users == nil {
-        return nil
-    }
-
-    responses := make([]response.UserLike, 0, len(users))
-    var userLike response.UserLike
-    for _, u := range users {
-        userLike = response.UserLike{
-            Username:  u.Username,
-            AvatarURL: u.AvatarURL,
-        }
-        responses = append(responses, userLike)
-    }
-    return responses
-}
-*/
 
 func FromDomainToTweetListResponse(tweets []entity.Tweet) []response.Tweet {
 	if tweets == nil {

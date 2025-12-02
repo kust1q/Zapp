@@ -102,7 +102,7 @@ func main() {
 	tweetService := tweets.NewTweetService(pgDB, mediaService, elasticRepo)
 	userService := user.NewUserService(pgDB, mediaService, elasticRepo)
 	feedService := feed.NewFeedService(pgDB, tweetService)
-	searchService := search.NewSearchService(elasticRepo, pgDB)
+	searchService := search.NewSearchService(pgDB, elasticRepo, mediaService)
 
 	handler := httpHandler.NewHandler(
 		authService,

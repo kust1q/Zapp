@@ -20,13 +20,14 @@ func (s *tweetService) GetTweetById(ctx context.Context, tweetID int) (*entity.T
 		}
 		return nil, fmt.Errorf("failed to get tweet by id: %w", err)
 	}
+	if tweet.MediaUrl != "" {
+		mediaUrl, err := s.media.GetMediaUrlByTweetID(ctx, tweet.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tweet media url: %w", err)
+		}
 
-	mediaUrl, err := s.media.GetMediaUrlByTweetID(ctx, tweet.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get tweet media url")
+		tweet.MediaUrl = mediaUrl
 	}
-
-	tweet.MediaUrl = mediaUrl
 
 	return s.BuildEntityTweetToResponse(ctx, tweet)
 }
@@ -43,11 +44,13 @@ func (s *tweetService) GetTweetsAndRetweetsByUsername(ctx context.Context, usern
 	}
 
 	for i := range tweets {
-		mediaUrl, err := s.media.GetMediaUrlByTweetID(ctx, tweets[i].ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get tweet media url")
+		if tweets[i].MediaUrl != "" {
+			mediaUrl, err := s.media.GetMediaUrlByTweetID(ctx, tweets[i].ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get tweet media url")
+			}
+			tweets[i].MediaUrl = mediaUrl
 		}
-		tweets[i].MediaUrl = mediaUrl
 		processedTweet, err := s.BuildEntityTweetToResponse(ctx, &tweets[i])
 		if err != nil {
 			return nil, err
@@ -67,11 +70,14 @@ func (s *tweetService) GetRepliesToTweet(ctx context.Context, tweetID int) ([]en
 	}
 
 	for i := range replies {
-		mediaUrl, err := s.media.GetMediaUrlByTweetID(ctx, replies[i].ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get tweet media url")
+		if replies[i].MediaUrl != "" {
+			mediaUrl, err := s.media.GetMediaUrlByTweetID(ctx, replies[i].ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get tweet media url")
+			}
+			replies[i].MediaUrl = mediaUrl
 		}
-		replies[i].MediaUrl = mediaUrl
+
 		processedTweet, err := s.BuildEntityTweetToResponse(ctx, &replies[i])
 		if err != nil {
 			return nil, err

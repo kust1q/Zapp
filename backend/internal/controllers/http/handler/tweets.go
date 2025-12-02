@@ -1,6 +1,8 @@
 package http
 
 import (
+	"errors"
+	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
@@ -9,6 +11,7 @@ import (
 	conv "github.com/kust1q/Zapp/backend/internal/controllers/http/conv"
 	"github.com/kust1q/Zapp/backend/internal/controllers/http/dto/request"
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
+	"github.com/kust1q/Zapp/backend/internal/errs"
 	"github.com/sirupsen/logrus"
 )
 
@@ -26,6 +29,8 @@ func (h *Handler) createTweet(c *gin.Context) {
 	}
 
 	var req request.Tweet
+	var fileHeader *multipart.FileHeader
+	var err error
 	ct := c.ContentType()
 	if strings.HasPrefix(ct, "multipart/form-data") {
 		if err := c.Request.ParseMultipartForm(maxMemoryForm); err != nil {
@@ -33,24 +38,24 @@ func (h *Handler) createTweet(c *gin.Context) {
 			return
 		}
 		req.Content = c.PostForm("content")
+		fileHeader, err = c.FormFile("file")
+		if err != nil && err != http.ErrMissingFile {
+			logrus.WithFields(logrus.Fields{
+				"user_id": userID.(int),
+				"error":   err,
+			}).Error("create tweet failed - internal server error")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "internal server error",
+			})
+			return
+		}
 	} else {
 		if err := c.BindJSON(&req); err != nil {
 			logrus.WithError(err).Error("failed to create tweet - invalid request body")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 			return
 		}
-	}
-
-	fileHeader, err := c.FormFile("file")
-	if err != nil && err != http.ErrMissingFile {
-		logrus.WithFields(logrus.Fields{
-			"user_id": userID.(int),
-			"error":   err,
-		}).Error("create tweet failed - internal server error")
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "internal server error",
-		})
-		return
+		fileHeader = nil
 	}
 
 	var file *entity.File
@@ -111,6 +116,7 @@ func (h *Handler) updateTweet(c *gin.Context) {
 	}
 
 	var req request.Tweet
+	var fileHeader *multipart.FileHeader
 	ct := c.ContentType()
 	if strings.HasPrefix(ct, "multipart/form-data") {
 		if err := c.Request.ParseMultipartForm(maxMemoryForm); err != nil {
@@ -118,24 +124,24 @@ func (h *Handler) updateTweet(c *gin.Context) {
 			return
 		}
 		req.Content = c.PostForm("content")
+		fileHeader, err = c.FormFile("file")
+		if err != nil && err != http.ErrMissingFile {
+			logrus.WithFields(logrus.Fields{
+				"user_id": userID.(int),
+				"error":   err,
+			}).Error("update tweet failed - internal server error")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "internal server error",
+			})
+			return
+		}
 	} else {
 		if err := c.BindJSON(&req); err != nil {
 			logrus.WithError(err).Error("failed to update tweet - invalid request body")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 			return
 		}
-	}
-
-	fileHeader, err := c.FormFile("file")
-	if err != nil && err != http.ErrMissingFile {
-		logrus.WithFields(logrus.Fields{
-			"user_id": userID.(int),
-			"error":   err,
-		}).Error("create tweet failed - internal server error")
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "internal server error",
-		})
-		return
+		fileHeader = nil
 	}
 
 	var file *entity.File
@@ -160,7 +166,7 @@ func (h *Handler) updateTweet(c *gin.Context) {
 	}
 
 	tweet, err := h.tweetService.UpdateTweet(c.Request.Context(), conv.FromTweetUpdateRequestToDomain(userID.(int), tweetID, file, &req))
-	if err != nil {
+	if err != nil && !errors.Is(err, errs.ErrTweetNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"user_id":  userID.(int),
 			"tweet_id": tweetID,
@@ -168,6 +174,16 @@ func (h *Handler) updateTweet(c *gin.Context) {
 		}).Error("update tweet failed - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
+		})
+		return
+	} else if errors.Is(err, errs.ErrTweetNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"user_id":  userID.(int),
+			"tweet_id": tweetID,
+			"error":    err,
+		}).Error("update tweet failed - tweet not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "tweet not found",
 		})
 		return
 	}
@@ -190,7 +206,7 @@ func (h *Handler) likeTweet(c *gin.Context) {
 		return
 	}
 
-	if err = h.tweetService.LikeTweet(c.Request.Context(), userID.(int), tweetID); err != nil {
+	if err = h.tweetService.LikeTweet(c.Request.Context(), userID.(int), tweetID); err != nil && !errors.Is(err, errs.ErrTweetNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"user_id":  userID.(int),
 			"tweet_id": tweetID,
@@ -198,6 +214,16 @@ func (h *Handler) likeTweet(c *gin.Context) {
 		}).Error("like tweet failed - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
+		})
+		return
+	} else if errors.Is(err, errs.ErrTweetNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"user_id":  userID.(int),
+			"tweet_id": tweetID,
+			"error":    err,
+		}).Error("like tweet failed - tweet not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "tweet not found",
 		})
 		return
 	}
@@ -226,7 +252,7 @@ func (h *Handler) unlikeTweet(c *gin.Context) {
 		return
 	}
 
-	if err = h.tweetService.UnlikeTweet(c.Request.Context(), userID.(int), tweetID); err != nil {
+	if err = h.tweetService.UnlikeTweet(c.Request.Context(), userID.(int), tweetID); err != nil && !errors.Is(err, errs.ErrTweetNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"user_id":  userID.(int),
 			"tweet_id": tweetID,
@@ -234,6 +260,16 @@ func (h *Handler) unlikeTweet(c *gin.Context) {
 		}).Error("unlike tweet failed - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
+		})
+		return
+	} else if errors.Is(err, errs.ErrTweetNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"user_id":  userID.(int),
+			"tweet_id": tweetID,
+			"error":    err,
+		}).Error("unlike tweet failed - tweet not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "tweet not found",
 		})
 		return
 	}
@@ -262,7 +298,7 @@ func (h *Handler) retweet(c *gin.Context) {
 		return
 	}
 
-	if err = h.tweetService.CreateRetweet(c.Request.Context(), userID.(int), tweetID); err != nil {
+	if err = h.tweetService.CreateRetweet(c.Request.Context(), userID.(int), tweetID); err != nil && !errors.Is(err, errs.ErrTweetNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"user_id":  userID.(int),
 			"tweet_id": tweetID,
@@ -270,6 +306,16 @@ func (h *Handler) retweet(c *gin.Context) {
 		}).Error("retweet failed - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
+		})
+		return
+	} else if errors.Is(err, errs.ErrTweetNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"user_id":  userID.(int),
+			"tweet_id": tweetID,
+			"error":    err,
+		}).Error("retweet failed - tweet not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "tweet not found",
 		})
 		return
 	}
@@ -298,7 +344,7 @@ func (h *Handler) deleteRetweet(c *gin.Context) {
 		return
 	}
 
-	if err = h.tweetService.DeleteRetweet(c.Request.Context(), userID.(int), retweetID); err != nil {
+	if err = h.tweetService.DeleteRetweet(c.Request.Context(), userID.(int), retweetID); err != nil && !errors.Is(err, errs.ErrTweetNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"user_id":    userID.(int),
 			"retweet_id": retweetID,
@@ -306,6 +352,16 @@ func (h *Handler) deleteRetweet(c *gin.Context) {
 		}).Error("retweet delete failed - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
+		})
+		return
+	} else if errors.Is(err, errs.ErrTweetNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"user_id":    userID.(int),
+			"retweet_id": retweetID,
+			"error":      err,
+		}).Error("retweet delete failed - tweet not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "tweet not found",
 		})
 		return
 	}
@@ -336,6 +392,7 @@ func (h *Handler) replyToTweet(c *gin.Context) {
 	}
 
 	var req request.Tweet
+	var fileHeader *multipart.FileHeader
 	ct := c.ContentType()
 	if strings.HasPrefix(ct, "multipart/form-data") {
 		if err := c.Request.ParseMultipartForm(maxMemoryForm); err != nil {
@@ -343,25 +400,25 @@ func (h *Handler) replyToTweet(c *gin.Context) {
 			return
 		}
 		req.Content = c.PostForm("content")
+		fileHeader, err = c.FormFile("file")
+		if err != nil && err != http.ErrMissingFile {
+			logrus.WithFields(logrus.Fields{
+				"user_id":         userID.(int),
+				"parent_tweet_id": parentTweetID,
+				"error":           err,
+			}).Error("reply to tweet failed - internal server error")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "internal server error",
+			})
+			return
+		}
 	} else {
 		if err := c.BindJSON(&req); err != nil {
 			logrus.WithError(err).Error("failed to reply to tweet - invalid request body")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 			return
 		}
-	}
-
-	fileHeader, err := c.FormFile("file")
-	if err != nil && err != http.ErrMissingFile {
-		logrus.WithFields(logrus.Fields{
-			"user_id":         userID.(int),
-			"parent_tweet_id": parentTweetID,
-			"error":           err,
-		}).Error("reply to tweet failed - internal server error")
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "internal server error",
-		})
-		return
+		fileHeader = nil
 	}
 
 	var file *entity.File
@@ -390,7 +447,6 @@ func (h *Handler) replyToTweet(c *gin.Context) {
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"user_id":         userID.(int),
-			"tweet_id":        tweet.ID,
 			"parent_tweet_id": parentTweetID,
 			"error":           err,
 		}).Error("create tweet failed - internal server error")
@@ -403,7 +459,6 @@ func (h *Handler) replyToTweet(c *gin.Context) {
 	logrus.WithFields(logrus.Fields{
 		"user_id":         userID.(int),
 		"parent_tweet_id": parentTweetID,
-		"error":           err,
 	}).Info("reply to tweet created")
 	c.JSON(http.StatusCreated, conv.FromDomainToTweetResponse(tweet))
 }
@@ -417,12 +472,21 @@ func (h *Handler) getReplies(c *gin.Context) {
 	}
 
 	replies, err := h.tweetService.GetRepliesToTweet(c.Request.Context(), tweetID)
-	if err != nil {
+	if err != nil && !errors.Is(err, errs.ErrTweetNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"tweet_id": tweetID,
 			"error":    err,
 		}).Error("failed to get replies - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	} else if errors.Is(err, errs.ErrTweetNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"tweet_id": tweetID,
+			"error":    err,
+		}).Error("failed to get replies - tweet not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "tweet not found",
+		})
 		return
 	}
 
@@ -439,12 +503,21 @@ func (h *Handler) getTweetById(c *gin.Context) {
 	}
 
 	tweet, err := h.tweetService.GetTweetById(c.Request.Context(), tweetID)
-	if err != nil {
+	if err != nil && !errors.Is(err, errs.ErrTweetNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"tweet_id": tweetID,
 			"error":    err,
 		}).Error("failed to get tweet - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	} else if errors.Is(err, errs.ErrTweetNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"tweet_id": tweetID,
+			"error":    err,
+		}).Error("failed to get tweet - tweet not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "tweet not found",
+		})
 		return
 	}
 
@@ -483,12 +556,21 @@ func (h *Handler) getLikes(c *gin.Context) {
 	}
 
 	likes, err := h.tweetService.GetLikes(c.Request.Context(), tweetID)
-	if err != nil {
+	if err != nil && !errors.Is(err, errs.ErrTweetNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"tweet_id": tweetID,
 			"error":    err,
 		}).Error("failed to get likes - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	} else if errors.Is(err, errs.ErrTweetNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"tweet_id": tweetID,
+			"error":    err,
+		}).Error("failed to get likes - tweet not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "tweet not found",
+		})
 		return
 	}
 
@@ -511,7 +593,7 @@ func (h *Handler) deleteTweet(c *gin.Context) {
 		return
 	}
 
-	if err := h.tweetService.DeleteTweet(c.Request.Context(), userID.(int), tweetID); err != nil {
+	if err := h.tweetService.DeleteTweet(c.Request.Context(), userID.(int), tweetID); err != nil && !errors.Is(err, errs.ErrTweetNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"user_id":  userID.(int),
 			"tweet_id": tweetID,
@@ -519,6 +601,16 @@ func (h *Handler) deleteTweet(c *gin.Context) {
 		}).Error("tweet delete failed - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
+		})
+		return
+	} else if errors.Is(err, errs.ErrTweetNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"user_id":  userID.(int),
+			"tweet_id": tweetID,
+			"error":    err,
+		}).Error("tweet delete failed - tweet not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "tweet not found",
 		})
 		return
 	}

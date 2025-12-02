@@ -29,17 +29,17 @@ func (h *Handler) search(c *gin.Context) {
 		}
 		c.JSON(http.StatusOK, gin.H{"users": users})
 
-	}
+	} else {
+		tweets, err := h.searchService.SearchTweets(c.Request.Context(), query)
+		if err != nil {
+			logrus.WithError(err).WithField("query", query).Error("failed to search tweets")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "search failed"})
+			return
+		}
 
-	tweets, err := h.searchService.SearchTweets(c.Request.Context(), query)
-	if err != nil {
-		logrus.WithError(err).WithField("query", query).Error("failed to search tweets")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "search failed"})
-		return
+		if tweets == nil {
+			tweets = []entity.Tweet{}
+		}
+		c.JSON(http.StatusOK, gin.H{"tweets": tweets})
 	}
-
-	if tweets == nil {
-		tweets = []entity.Tweet{}
-	}
-	c.JSON(http.StatusOK, gin.H{"tweets": tweets})
 }

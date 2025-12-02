@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func (s *authService) RecoveryPassword(ctx context.Context, req *entity.RecoveryPassword) error {
@@ -27,5 +28,10 @@ func (s *authService) RecoveryPassword(ctx context.Context, req *entity.Recovery
 		return fmt.Errorf("failed to get userID: %w", err)
 	}
 
-	return s.db.UpdateUserPassword(ctx, userID, req.NewPassword)
+	newHashPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("password hashing failed: %w", err)
+	}
+
+	return s.db.UpdateUserPassword(ctx, userID, string(newHashPassword))
 }

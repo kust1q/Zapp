@@ -89,7 +89,7 @@ func (s *tweetService) BuildEntityTweetToResponse(ctx context.Context, tweet *en
 		Author: &entity.SmallUser{
 			ID:        author.ID,
 			Username:  author.Username,
-			AvatarURL: avatarUrl,
+			AvatarUrl: avatarUrl,
 		},
 		Counters: counts,
 	}, nil

@@ -30,7 +30,7 @@ func (s *tweetService) GetLikes(ctx context.Context, tweetID int) ([]entity.Smal
 	}
 
 	for i := range users {
-		users[i].AvatarURL, err = s.media.GetAvatarUrlByUserID(ctx, users[i].ID)
+		users[i].AvatarUrl, err = s.media.GetAvatarUrlByUserID(ctx, users[i].ID)
 		if err != nil {
 			logrus.WithError(err).Warn("failed to get avatar url")
 		}

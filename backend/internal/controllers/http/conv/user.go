@@ -26,7 +26,7 @@ func FromDomainToSmallUserResponse(user *entity.SmallUser) *response.SmallUser {
 
 	return &response.SmallUser{
 		Username:  user.Username,
-		AvatarURL: user.AvatarURL,
+		AvatarURL: user.AvatarUrl,
 	}
 }
 
@@ -48,7 +48,7 @@ func FromDomainToUserResponse(user *entity.User) *response.User {
 		Gen:       user.Gen,
 		Email:     email,
 		CreatedAt: user.CreatedAt,
-		AvatarURL: user.AvatarURL,
+		AvatarURL: user.AvatarUrl,
 	}
 }
 

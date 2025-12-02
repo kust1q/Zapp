@@ -50,7 +50,7 @@ func (pg *PostgresDB) GetUsersByIDs(ctx context.Context, ids []int) ([]entity.Us
 	}
 
 	query := fmt.Sprintf(`
-        SELECT id, username, email, password_hash, bio, gen, created_at, is_active, is_superuser 
+        SELECT id, username, email, password, bio, gen, created_at, is_active, is_superuser 
         FROM %s 
         WHERE id = ANY($1)`,
 		UserTable)

@@ -81,7 +81,7 @@ func (s *authService) SignUp(ctx context.Context, req *entity.User) (*entity.Use
 		Username:  createdUser.Username,
 		Bio:       createdUser.Bio,
 		Gen:       createdUser.Gen,
-		AvatarURL: avatar.Path,
+		AvatarUrl: avatar.Path,
 		CreatedAt: createdUser.CreatedAt,
 		Credential: &entity.Credential{
 			Email: createdUser.Credential.Email,
@@ -133,7 +133,7 @@ func (s *authService) checkUserExists(ctx context.Context, email, username strin
 	if err == nil {
 		return errs.ErrEmailAlreadyUsed
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	if !errors.Is(err, errs.ErrUserNotFound) {
 		return fmt.Errorf("email check failed: %w", err)
 	}
 
@@ -141,7 +141,7 @@ func (s *authService) checkUserExists(ctx context.Context, email, username strin
 	if err == nil {
 		return errs.ErrUsernameAlreadyUsed
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	if !errors.Is(err, errs.ErrUserNotFound) {
 		return fmt.Errorf("username check failed: %w", err)
 	}
 	return nil

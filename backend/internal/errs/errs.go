@@ -10,6 +10,7 @@ var (
 	ErrTokenNotFound       = errors.New("refresh token not found")
 	ErrInvalidRefreshToken = errors.New("invalid refresh token")
 	ErrUserNotFound        = errors.New("user not found")
+	ErrTweetNotFound       = errors.New("tweet not found")
 
 	ErrFileTooLarge     = errors.New("file too large")
 	ErrInvalidmediaType = errors.New("invalid media type")

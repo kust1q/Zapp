@@ -22,7 +22,7 @@ func (s *userService) GetUserByID(ctx context.Context, userID int) (*entity.User
 		return nil, fmt.Errorf("failed to get avatar by user id: %w", err)
 	}
 
-	user.AvatarURL = avatarUrl
+	user.AvatarUrl = avatarUrl
 
 	return user, nil
 }
@@ -41,7 +41,7 @@ func (s *userService) GetUserByUsername(ctx context.Context, username string) (*
 		return nil, fmt.Errorf("failed to get avatar by user id: %w", err)
 	}
 
-	user.AvatarURL = avatarURL
+	user.AvatarUrl = avatarURL
 
 	return user, nil
 }

@@ -6,15 +6,11 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"golang.org/x/crypto/bcrypt"
 )
 
 func (s *tokensDB) StoreRefresh(ctx context.Context, refreshToken, userID string, ttl time.Duration) error {
-	refreshKey, err := s.buildRefreshKey(refreshToken)
-	if err != nil {
-		return err
-	}
-	_, err = s.redis.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+	refreshKey := s.buildRefreshKey(refreshToken)
+	_, err := s.redis.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 		pipe.SAdd(ctx, refreshKey, refreshToken)
 		pipe.Expire(ctx, s.buildSessionKey(userID), ttl)
 		pipe.Set(ctx, refreshKey, userID, ttl)
@@ -24,10 +20,7 @@ func (s *tokensDB) StoreRefresh(ctx context.Context, refreshToken, userID string
 }
 
 func (s *tokensDB) GetUserIdByRefreshToken(ctx context.Context, refreshToken string) (string, error) {
-	refreshKey, err := s.buildRefreshKey(refreshToken)
-	if err != nil {
-		return "", err
-	}
+	refreshKey := s.buildRefreshKey(refreshToken)
 	userID, err := s.redis.Get(ctx, refreshKey).Result()
 	if err != nil {
 		if err == redis.Nil {
@@ -46,10 +39,7 @@ func (s *tokensDB) RemoveRefresh(ctx context.Context, refreshToken string) error
 	if err != nil {
 		return err
 	}
-	refreshKey, err := s.buildRefreshKey(refreshToken)
-	if err != nil {
-		return err
-	}
+	refreshKey := s.buildRefreshKey(refreshToken)
 	pipe := s.redis.Pipeline()
 	pipe.Del(ctx, refreshKey)
 	pipe.SRem(ctx, s.buildSessionKey(userID), refreshToken)
@@ -64,10 +54,7 @@ func (s *tokensDB) CloseAllSessions(ctx context.Context, userID string) error {
 	}
 	pipe := s.redis.Pipeline()
 	for _, token := range tokens {
-		refreshKey, err := s.buildRefreshKey(token)
-		if err != nil {
-			return err
-		}
+		refreshKey := s.buildRefreshKey(token)
 		pipe.Del(ctx, refreshKey)
 		pipe.SRem(ctx, s.buildSessionKey(userID), token)
 	}
@@ -75,12 +62,8 @@ func (s *tokensDB) CloseAllSessions(ctx context.Context, userID string) error {
 	return err
 }
 
-func (s *tokensDB) buildRefreshKey(refreshToken string) (string, error) {
-	refreshHash, err := bcrypt.GenerateFromPassword([]byte(refreshToken), bcrypt.DefaultCost)
-	if err != nil {
-		return "", fmt.Errorf("failed to hash refresh token: %w", err)
-	}
-	return prefixRefreshToken + string(refreshHash), nil
+func (s *tokensDB) buildRefreshKey(refreshToken string) string {
+	return prefixRefreshToken + refreshToken
 }
 
 func (s *tokensDB) buildSessionKey(userID string) string {

@@ -1,12 +1,14 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	conv "github.com/kust1q/Zapp/backend/internal/controllers/http/conv"
 	"github.com/kust1q/Zapp/backend/internal/controllers/http/dto/request"
+	"github.com/kust1q/Zapp/backend/internal/errs"
 	"github.com/sirupsen/logrus"
 )
 
@@ -20,7 +22,7 @@ func (h *Handler) getMe(c *gin.Context) {
 	}
 
 	userProfile, err := h.userService.GetMe(c.Request.Context(), userID.(int))
-	if err != nil {
+	if err != nil && !errors.Is(err, errs.ErrUserNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"user_id": userID.(int),
 			"error":   err,
@@ -29,12 +31,18 @@ func (h *Handler) getMe(c *gin.Context) {
 			"error": "internal server error",
 		})
 		return
+	} else if errors.Is(err, errs.ErrUserNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"user_id": userID.(int),
+			"error":   err,
+		}).Error("failed to get user profile - user not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "user not found",
+		})
+		return
 	}
 
 	logrus.WithField("user_id", userID.(int)).Info("successfully get profile")
-	c.JSON(http.StatusOK, gin.H{
-		"message": "successfully get profile",
-	})
 	c.JSON(http.StatusOK, conv.FromDomainToUserProfileResponse(userProfile))
 }
 
@@ -53,13 +61,22 @@ func (h *Handler) updateMe(c *gin.Context) {
 		return
 	}
 
-	if err := h.userService.Update(c.Request.Context(), conv.FromUpdateBioRequestToDomain(userID.(int), &req)); err != nil {
+	if err := h.userService.Update(c.Request.Context(), conv.FromUpdateBioRequestToDomain(userID.(int), &req)); err != nil && !errors.Is(err, errs.ErrUserNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"user_id": userID.(int),
 			"error":   err,
 		}).Error("failed to update bio - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
+		})
+		return
+	} else if errors.Is(err, errs.ErrUserNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"user_id": userID.(int),
+			"error":   err,
+		}).Error("failed to update bio - user not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "user not found",
 		})
 		return
 	}
@@ -78,13 +95,22 @@ func (h *Handler) deleteMe(c *gin.Context) {
 		return
 	}
 
-	if err := h.userService.DeleteUser(c.Request.Context(), userID.(int)); err != nil {
+	if err := h.userService.DeleteUser(c.Request.Context(), userID.(int)); err != nil && !errors.Is(err, errs.ErrUserNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"user_id": userID.(int),
 			"error":   err,
 		}).Error("failed to delete user - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
+		})
+		return
+	} else if errors.Is(err, errs.ErrUserNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"user_id": userID.(int),
+			"error":   err,
+		}).Error("failed to delete user - user not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "user not found",
 		})
 		return
 	}
@@ -103,13 +129,22 @@ func (h *Handler) followers(c *gin.Context) {
 		return
 	}
 	followers, err := h.userService.GetFollowers(c.Request.Context(), username)
-	if err != nil {
+	if err != nil && !errors.Is(err, errs.ErrUserNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"username": username,
 			"error":    err,
 		}).Error("failed to get followers - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
+		})
+		return
+	} else if errors.Is(err, errs.ErrUserNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"username": username,
+			"error":    err,
+		}).Error("failed to get followers - user not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "user not found",
 		})
 		return
 	}
@@ -125,13 +160,22 @@ func (h *Handler) following(c *gin.Context) {
 		return
 	}
 	followings, err := h.userService.GetFollowings(c.Request.Context(), username)
-	if err != nil {
+	if err != nil && !errors.Is(err, errs.ErrUserNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"username": username,
 			"error":    err,
 		}).Error("failed to get followings - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
+		})
+		return
+	} else if errors.Is(err, errs.ErrUserNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"username": username,
+			"error":    err,
+		}).Error("failed to get followings - user not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "user not found",
 		})
 		return
 	}
@@ -156,7 +200,7 @@ func (h *Handler) followUser(c *gin.Context) {
 	}
 
 	follow, err := h.userService.FollowToUser(c.Request.Context(), followerID.(int), followingID)
-	if err != nil {
+	if err != nil && !errors.Is(err, errs.ErrUserNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"follower_id":  followerID,
 			"following_id": followingID,
@@ -164,6 +208,16 @@ func (h *Handler) followUser(c *gin.Context) {
 		}).Error("failed to follow - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
+		})
+		return
+	} else if errors.Is(err, errs.ErrUserNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"follower_id":  followerID,
+			"following_id": followingID,
+			"error":        err,
+		}).Error("failed to follow - user not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "user not found",
 		})
 		return
 	}
@@ -190,7 +244,7 @@ func (h *Handler) unfollowUser(c *gin.Context) {
 		return
 	}
 
-	if err := h.userService.UnfollowUser(c.Request.Context(), followerID.(int), followingID); err != nil {
+	if err := h.userService.UnfollowUser(c.Request.Context(), followerID.(int), followingID); err != nil && !errors.Is(err, errs.ErrUserNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"follower_id":  followerID,
 			"following_id": followingID,
@@ -198,6 +252,16 @@ func (h *Handler) unfollowUser(c *gin.Context) {
 		}).Error("failed to unfollow - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
+		})
+		return
+	} else if errors.Is(err, errs.ErrUserNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"follower_id":  followerID,
+			"following_id": followingID,
+			"error":        err,
+		}).Error("failed to unfollow - user not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "user not found",
 		})
 		return
 	}
@@ -219,13 +283,22 @@ func (h *Handler) getUserProfile(c *gin.Context) {
 	}
 
 	profile, err := h.userService.GetUserProfile(c.Request.Context(), username)
-	if err != nil {
+	if err != nil && !errors.Is(err, errs.ErrUserNotFound) {
 		logrus.WithFields(logrus.Fields{
 			"username": username,
 			"error":    err,
 		}).Error("failed to get user profile - internal server error")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
+		})
+		return
+	} else if errors.Is(err, errs.ErrUserNotFound) {
+		logrus.WithFields(logrus.Fields{
+			"username": username,
+			"error":    err,
+		}).Error("failed to get user profile - user not found")
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "user not found",
 		})
 		return
 	}

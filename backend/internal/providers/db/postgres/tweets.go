@@ -91,6 +91,9 @@ func (pg *PostgresDB) GetTweetById(ctx context.Context, tweetID int) (*entity.Tw
 	var tweetModel models.Tweet
 	err = pg.db.GetContext(ctx, &tweetModel, query, tweetID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errs.ErrTweetNotFound
+		}
 		return nil, err
 	}
 
@@ -139,7 +142,7 @@ func (pg *PostgresDB) DeleteTweet(ctx context.Context, userID, tweetID int) erro
 		return err
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("tweet not found")
+		return errs.ErrTweetNotFound
 	}
 	go func(tweetID int) {
 		cntx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -160,7 +163,7 @@ func (pg *PostgresDB) LikeTweet(ctx context.Context, userID, tweetID int) error 
 		return err
 	}
 	if !exists {
-		return fmt.Errorf("tweet not found")
+		return errs.ErrTweetNotFound
 	}
 	query := fmt.Sprintf("INSERT INTO %s (user_id, tweet_id) VALUES ($1, $2) ON CONFLICT (user_id, tweet_id) DO NOTHING", LikesTable)
 	_, err = pg.db.ExecContext(ctx, query, userID, tweetID)
@@ -191,7 +194,7 @@ func (pg *PostgresDB) UnLikeTweet(ctx context.Context, userID, tweetID int) erro
 		return err
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("tweet not found")
+		return errs.ErrTweetNotFound
 	}
 	go func(tweetID int) {
 		cntx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -212,7 +215,7 @@ func (pg *PostgresDB) Retweet(ctx context.Context, userID, tweetID int, createdA
 		return err
 	}
 	if !exists {
-		return fmt.Errorf("tweet not found")
+		return errs.ErrTweetNotFound
 	}
 	query := fmt.Sprintf("INSERT INTO %s (user_id, tweet_id, created_at) VALUES ($1, $2, $3)", RetweetsTable)
 	_, err = pg.db.ExecContext(ctx, query, userID, tweetID, createdAt)
@@ -230,12 +233,22 @@ func (pg *PostgresDB) DeleteRetweet(ctx context.Context, userID, retweetID int) 
 		return err
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("retweet not found")
+		return errs.ErrTweetNotFound
 	}
 	return nil
 }
 
 func (pg *PostgresDB) GetRepliesToTweet(ctx context.Context, parentTweetID int) ([]entity.Tweet, error) {
+	var exists bool
+	checkQuery := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE id = $1)", TweetsTable)
+	err := pg.db.QueryRowContext(ctx, checkQuery, parentTweetID).Scan(&exists)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errs.ErrTweetNotFound
+	}
+
 	ids, err := pg.Cache.GetReplyIDs(ctx, parentTweetID)
 	if err != nil && !errors.Is(err, errs.ErrCacheKeyNotFound) {
 		logrus.WithError(err).Warnf("get reply ids from Cache failed")
@@ -338,7 +351,6 @@ func (pg *PostgresDB) GetCounts(ctx context.Context, tweetID int) (*entity.Count
 	} else if err == nil {
 		return conv.FromCountersModelToDomain(Cached), nil
 	}
-
 	query := fmt.Sprintf(`
         SELECT 
             (SELECT COUNT(*) FROM %s WHERE tweet_id = $1) as likes,
@@ -370,6 +382,16 @@ func (pg *PostgresDB) GetCounts(ctx context.Context, tweetID int) (*entity.Count
 }
 
 func (pg *PostgresDB) GetLikes(ctx context.Context, tweetID int) ([]entity.SmallUser, error) {
+	var exists bool
+	checkQuery := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE id = $1)", TweetsTable)
+	err := pg.db.QueryRowContext(ctx, checkQuery, tweetID).Scan(&exists)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errs.ErrTweetNotFound
+	}
+
 	query := fmt.Sprintf(
 		`SELECT u.id, u.username, a.path as avatar_path
         FROM %s l
@@ -396,7 +418,7 @@ func (pg *PostgresDB) GetLikes(ctx context.Context, tweetID int) ([]entity.Small
 		res = append(res, entity.SmallUser{
 			ID:        row.ID,
 			Username:  row.Username,
-			AvatarURL: row.AvatarPath,
+			AvatarUrl: row.AvatarPath,
 		})
 		ids = append(ids, row.ID)
 	}

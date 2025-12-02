@@ -6,22 +6,15 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"golang.org/x/crypto/bcrypt"
 )
 
 func (s *tokensDB) StoreRecovery(ctx context.Context, recoveryToken, userID string, ttl time.Duration) error {
-	recoveryKey, err := s.buildRecoveryKey(recoveryToken)
-	if err != nil {
-		return err
-	}
+	recoveryKey := s.buildRecoveryKey(recoveryToken)
 	return s.redis.Set(ctx, recoveryKey, userID, ttl).Err()
 }
 
 func (s *tokensDB) GetUserIdByRecoveryToken(ctx context.Context, recoveryToken string) (string, error) {
-	recoveryKey, err := s.buildRecoveryKey(recoveryToken)
-	if err != nil {
-		return "", err
-	}
+	recoveryKey := s.buildRecoveryKey(recoveryToken)
 	userID, err := s.redis.Get(ctx, recoveryKey).Result()
 	if err != nil {
 		if err == redis.Nil {
@@ -33,21 +26,14 @@ func (s *tokensDB) GetUserIdByRecoveryToken(ctx context.Context, recoveryToken s
 }
 
 func (s *tokensDB) RemoveRecovery(ctx context.Context, recoveryToken string) error {
-	recoveryKey, err := s.buildRecoveryKey(recoveryToken)
-	if err != nil {
-		return err
-	}
-	err = s.redis.Del(ctx, recoveryKey).Err()
+	recoveryKey := s.buildRecoveryKey(recoveryToken)
+	err := s.redis.Del(ctx, recoveryKey).Err()
 	if err != nil && err != redis.Nil {
 		return fmt.Errorf("failed to remove recovery token: %w", err)
 	}
 	return nil
 }
 
-func (s *tokensDB) buildRecoveryKey(recoveryToken string) (string, error) {
-	recoveryHash, err := bcrypt.GenerateFromPassword([]byte(recoveryToken), bcrypt.DefaultCost)
-	if err != nil {
-		return "", fmt.Errorf("failed to hash refresh token: %w", err)
-	}
-	return prefixRecoveryToken + string(recoveryHash), nil
+func (s *tokensDB) buildRecoveryKey(recoveryToken string) string {
+	return prefixRecoveryToken + recoveryToken
 }

@@ -6,8 +6,7 @@ import (
 
 type (
 	Tweet struct {
-		ID int
-		//UserID        int
+		ID            int
 		ParentTweetID *int
 		Content       string
 		CreatedAt     time.Time
