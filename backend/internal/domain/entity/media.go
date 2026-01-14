@@ -1,7 +1,21 @@
 package entity
 
+type MediaType string
+
+const (
+	MediaTypeImage MediaType = "image"
+	MediaTypeVideo MediaType = "video"
+	MediaTypeAudio MediaType = "audio"
+	MediaTypeGIF   MediaType = "gif"
+)
+
 type (
-	MediaType string
+	MediaPolicy struct {
+		MaxSize       int64
+		AllowedMime   []string
+		AllowedExt    []string
+		ForceMimeType string
+	}
 
 	TweetMedia struct {
 		ID        int
@@ -18,11 +32,4 @@ type (
 		MimeType  string
 		SizeBytes int64
 	}
-)
-
-const (
-	MediaTypeImage MediaType = "image"
-	MediaTypeVideo MediaType = "video"
-	MediaTypeAudio MediaType = "audio"
-	MediaTypeGIF   MediaType = "gif"
 )

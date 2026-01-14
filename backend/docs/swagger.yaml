@@ -1,0 +1,1295 @@
+basePath: /api/v1/
+definitions:
+  request.ForgotPassword:
+    properties:
+      email:
+        maxLength: 64
+        type: string
+    required:
+    - email
+    type: object
+  request.RecoveryPassword:
+    properties:
+      new_password:
+        maxLength: 64
+        minLength: 8
+        type: string
+      recovery_token:
+        maxLength: 100
+        minLength: 8
+        type: string
+    required:
+    - new_password
+    - recovery_token
+    type: object
+  request.SignIn:
+    properties:
+      email:
+        type: string
+      password:
+        maxLength: 64
+        minLength: 8
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  request.SignUp:
+    properties:
+      bio:
+        maxLength: 140
+        type: string
+      email:
+        maxLength: 64
+        type: string
+      gen:
+        enum:
+        - male
+        - female
+        type: string
+      password:
+        maxLength: 64
+        minLength: 8
+        type: string
+      username:
+        maxLength: 64
+        type: string
+    required:
+    - email
+    - gen
+    - password
+    - username
+    type: object
+  request.UpdateBio:
+    properties:
+      bio:
+        type: string
+    type: object
+  request.UpdatePassword:
+    properties:
+      new_password:
+        maxLength: 64
+        minLength: 8
+        type: string
+      old_password:
+        maxLength: 64
+        minLength: 8
+        type: string
+    required:
+    - new_password
+    - old_password
+    type: object
+  response.Access:
+    properties:
+      access_token:
+        type: string
+    type: object
+  response.Avatar:
+    properties:
+      avatar_url:
+        type: string
+      mime_type:
+        type: string
+      size_bytes:
+        type: integer
+    type: object
+  response.Counters:
+    properties:
+      like_count:
+        type: integer
+      reply_count:
+        type: integer
+      retweet_count:
+        type: integer
+    type: object
+  response.Error:
+    properties:
+      error:
+        type: string
+    type: object
+  response.Follow:
+    properties:
+      created_at:
+        type: string
+      follower_id:
+        type: integer
+      following_id:
+        type: integer
+    type: object
+  response.Message:
+    properties:
+      message:
+        type: string
+    type: object
+  response.Recovery:
+    properties:
+      recovery_token:
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - recovery_token
+    type: object
+  response.SearchResult:
+    properties:
+      tweets:
+        items:
+          $ref: '#/definitions/response.Tweet'
+        type: array
+      users:
+        items:
+          $ref: '#/definitions/response.User'
+        type: array
+    type: object
+  response.SignUp:
+    properties:
+      avatar_url:
+        type: string
+      bio:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      gen:
+        type: string
+      id:
+        type: integer
+      username:
+        type: string
+    type: object
+  response.SmallUser:
+    properties:
+      avatar_url:
+        type: string
+      username:
+        type: string
+    type: object
+  response.SmallUserList:
+    properties:
+      users:
+        items:
+          $ref: '#/definitions/response.SmallUser'
+        type: array
+    type: object
+  response.Tweet:
+    properties:
+      author:
+        $ref: '#/definitions/response.SmallUser'
+      content:
+        type: string
+      counters:
+        $ref: '#/definitions/response.Counters'
+      created_at:
+        type: string
+      id:
+        type: integer
+      media_url:
+        type: string
+      parent_tweet_id:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  response.TweetList:
+    properties:
+      tweets:
+        items:
+          $ref: '#/definitions/response.Tweet'
+        type: array
+    type: object
+  response.TweetMedia:
+    properties:
+      media_url:
+        type: string
+      mime_type:
+        type: string
+      size_bytes:
+        type: integer
+    type: object
+  response.User:
+    properties:
+      avatar_url:
+        type: string
+      bio:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      gen:
+        type: string
+      id:
+        type: integer
+      username:
+        type: string
+    type: object
+  response.UserProfile:
+    properties:
+      tweets:
+        items:
+          $ref: '#/definitions/response.Tweet'
+        type: array
+      user:
+        $ref: '#/definitions/response.User'
+    type: object
+info:
+  contact: {}
+  description: Simple Twitter-like REST API.
+  title: Twitter-like API
+  version: "1.0"
+paths:
+  /auth/forgot-password:
+    post:
+      consumes:
+      - application/json
+      description: Generate recovery token and send password reset instructions to
+        email.
+      parameters:
+      - description: Forgot password data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.ForgotPassword'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Recovery'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: Forgot password
+      tags:
+      - auth
+  /auth/recovery-password:
+    patch:
+      consumes:
+      - application/json
+      description: Reset password using recovery token received via email.
+      parameters:
+      - description: Recovery password data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.RecoveryPassword'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Message'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: Recovery password
+      tags:
+      - auth
+  /auth/refresh:
+    patch:
+      description: Use refresh token from cookie to get new access and refresh tokens.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Access'
+        "401":
+          description: Unauthorized or invalid token
+          schema:
+            $ref: '#/definitions/response.Error'
+        "403":
+          description: User not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: Refresh tokens
+      tags:
+      - auth
+  /auth/sign-in:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user by email and password. Sets refresh token in
+        cookie.
+      parameters:
+      - description: Sign in data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.SignIn'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Access'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/response.Error'
+        "401":
+          description: Invalid credentials
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: User login
+      tags:
+      - auth
+  /auth/sign-out:
+    delete:
+      description: Remove refresh token cookie and invalidate session.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Message'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: Sign out
+      tags:
+      - auth
+  /auth/sign-up:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user account with email, username and password.
+      parameters:
+      - description: Sign up data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.SignUp'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.SignUp'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/response.Error'
+        "409":
+          description: Email or username already used
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: User registration
+      tags:
+      - auth
+  /protected/feed:
+    get:
+      description: Get tweets feed for current authenticated user (subscriptions,
+        own tweets, etc.).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TweetList'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Get user feed
+      tags:
+      - feed
+  /protected/reset-password:
+    put:
+      consumes:
+      - application/json
+      description: Update password for current user (requires valid access token).
+      parameters:
+      - description: Update password data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdatePassword'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Message'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/response.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Update password
+      tags:
+      - auth
+  /protected/tweets:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Create a new tweet with optional media file. Supports multipart/form-data
+        only.
+      parameters:
+      - description: Tweet text content
+        in: formData
+        name: content
+        type: string
+      - description: Optional media file
+        in: formData
+        name: file
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Tweet'
+        "400":
+          description: Invalid request body or empty tweet
+          schema:
+            $ref: '#/definitions/response.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Create tweet
+      tags:
+      - tweets
+  /protected/tweets/{tweet_id}:
+    delete:
+      description: Delete tweet by ID for current authenticated user.
+      parameters:
+      - description: Tweet ID
+        in: path
+        name: tweet_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Message'
+        "400":
+          description: Invalid tweet ID
+          schema:
+            $ref: '#/definitions/response.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: Tweet not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Delete tweet
+      tags:
+      - tweets
+    patch:
+      consumes:
+      - application/json
+      - multipart/form-data
+      description: Update tweet content and optionally replace media. Supports multipart/form-data
+        only.
+      parameters:
+      - description: Tweet ID
+        in: path
+        name: tweet_id
+        required: true
+        type: integer
+      - description: Tweet text content
+        in: formData
+        name: content
+        type: string
+      - description: Optional media file
+        in: formData
+        name: file
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Tweet'
+        "400":
+          description: Invalid tweet ID or request body
+          schema:
+            $ref: '#/definitions/response.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: Tweet not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Update tweet
+      tags:
+      - tweets
+  /protected/tweets/{tweet_id}/like:
+    delete:
+      description: Remove like from tweet by ID for current authenticated user.
+      parameters:
+      - description: Tweet ID
+        in: path
+        name: tweet_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Message'
+        "400":
+          description: Invalid tweet ID
+          schema:
+            $ref: '#/definitions/response.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: Tweet not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Unlike tweet
+      tags:
+      - tweets
+    post:
+      description: Like tweet by ID for current authenticated user.
+      parameters:
+      - description: Tweet ID
+        in: path
+        name: tweet_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Message'
+        "400":
+          description: Invalid tweet ID
+          schema:
+            $ref: '#/definitions/response.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: Tweet not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Like tweet
+      tags:
+      - tweets
+  /protected/tweets/{tweet_id}/media:
+    delete:
+      description: Delete media attached to the specified tweet. Only owner can delete.
+      parameters:
+      - description: Tweet ID
+        in: path
+        name: tweet_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Message'
+        "400":
+          description: Invalid tweet ID
+          schema:
+            $ref: '#/definitions/response.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Delete tweet media
+      tags:
+      - media
+  /protected/tweets/{tweet_id}/reply:
+    post:
+      consumes:
+      - application/json
+      - multipart/form-data
+      description: Create reply tweet to given tweet with optional media. Supports
+        multipart/form-data only.
+      parameters:
+      - description: Parent tweet ID
+        in: path
+        name: tweet_id
+        required: true
+        type: integer
+      - description: Reply text content
+        in: formData
+        name: content
+        type: string
+      - description: Optional media file
+        in: formData
+        name: file
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Tweet'
+        "400":
+          description: Invalid tweet ID, body or empty reply
+          schema:
+            $ref: '#/definitions/response.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Reply to tweet
+      tags:
+      - tweets
+  /protected/tweets/{tweet_id}/retweet:
+    delete:
+      description: Delete existing retweet by retweet ID for current authenticated
+        user.
+      parameters:
+      - description: Retweet ID
+        in: path
+        name: tweet_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Message'
+        "400":
+          description: Invalid retweet ID
+          schema:
+            $ref: '#/definitions/response.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: Tweet not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Delete retweet
+      tags:
+      - tweets
+    post:
+      description: Create retweet for specified tweet ID for current authenticated
+        user.
+      parameters:
+      - description: Tweet ID
+        in: path
+        name: tweet_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Message'
+        "400":
+          description: Invalid tweet ID
+          schema:
+            $ref: '#/definitions/response.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: Tweet not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Retweet tweet
+      tags:
+      - tweets
+  /protected/users/{user_id}/follow:
+    delete:
+      description: Unfollow user by ID as current authenticated user.
+      parameters:
+      - description: User ID to unfollow
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Message'
+        "400":
+          description: Invalid user ID
+          schema:
+            $ref: '#/definitions/response.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Unfollow user
+      tags:
+      - users
+    post:
+      description: Follow user by ID as current authenticated user.
+      parameters:
+      - description: User ID to follow
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Follow'
+        "400":
+          description: Invalid user ID
+          schema:
+            $ref: '#/definitions/response.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Follow user
+      tags:
+      - users
+  /protected/users/me:
+    delete:
+      description: Delete account of the currently authenticated user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Message'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Delete current user
+      tags:
+      - users
+    get:
+      description: Get profile information of the currently authenticated user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.UserProfile'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Get current user profile
+      tags:
+      - users
+    patch:
+      consumes:
+      - application/json
+      description: Update profile bio of the currently authenticated user.
+      parameters:
+      - description: Update bio data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateBio'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Message'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/response.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      security:
+      - Bearer: []
+      summary: Update current user bio
+      tags:
+      - users
+  /protected/ws:
+    get:
+      consumes:
+      - application/json
+      description: Upgrade HTTP connection to WebSocket for real-time notifications.
+        Requires JWT token in query param or Authorization header.
+      parameters:
+      - description: JWT Access Token (optional if header present)
+        in: query
+        name: token
+        type: string
+      produces:
+      - application/json
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: string
+        "401":
+          description: Unauthorized or invalid token
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: Connect to WebSocket
+      tags:
+      - websocket
+  /public:
+    get:
+      responses: {}
+  /public/search:
+    get:
+      description: Search users or tweets by query string. Use type=user to search
+        users; otherwise searches tweets.
+      parameters:
+      - description: Search query
+        in: query
+        name: query
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SearchResult'
+        "400":
+          description: Missing or invalid query parameter
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Search failed
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: Search users or tweets
+      tags:
+      - search
+  /public/tweets/{tweet_id}:
+    get:
+      description: Get single tweet by its ID.
+      parameters:
+      - description: Tweet ID
+        in: path
+        name: tweet_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Tweet'
+        "400":
+          description: Invalid tweet ID
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: Tweet not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: Get tweet by ID
+      tags:
+      - tweets
+  /public/tweets/{tweet_id}/likes:
+    get:
+      description: Get list of users who liked specified tweet.
+      parameters:
+      - description: Tweet ID
+        in: path
+        name: tweet_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SmallUserList'
+        "400":
+          description: Invalid tweet ID
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: Tweet not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: Get tweet likes
+      tags:
+      - tweets
+  /public/tweets/{tweet_id}/replies:
+    get:
+      description: Get list of replies for specified tweet ID.
+      parameters:
+      - description: Tweet ID
+        in: path
+        name: tweet_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TweetList'
+        "400":
+          description: Invalid tweet ID
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: Tweet not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: Get tweet replies
+      tags:
+      - tweets
+  /public/users/{username}/followers:
+    get:
+      description: Get list of followers for specified username.
+      parameters:
+      - description: Username
+        in: path
+        name: username
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SmallUserList'
+        "400":
+          description: Invalid username
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: Get followers
+      tags:
+      - users
+  /public/users/{username}/following:
+    get:
+      description: Get list of users that specified username is following.
+      parameters:
+      - description: Username
+        in: path
+        name: username
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SmallUserList'
+        "400":
+          description: Invalid username
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: Get followings
+      tags:
+      - users
+  /public/users/{username}/profile:
+    get:
+      description: Get public profile information for specified username.
+      parameters:
+      - description: Username
+        in: path
+        name: username
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.UserProfile'
+        "400":
+          description: Invalid username
+          schema:
+            $ref: '#/definitions/response.Error'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: Get user profile
+      tags:
+      - users
+  /public/users/{username}/tweets:
+    get:
+      description: Get list of tweets and retweets for specified username.
+      parameters:
+      - description: Username
+        in: path
+        name: username
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TweetList'
+        "400":
+          description: Invalid username
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: Get user tweets and retweets
+      tags:
+      - tweets
+  /public/users/avatar/{user_id}:
+    get:
+      description: Get avatar media data for specified user ID.
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Avatar'
+        "400":
+          description: Invalid user ID
+          schema:
+            $ref: '#/definitions/response.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Error'
+      summary: Get user avatar
+      tags:
+      - media
+securityDefinitions:
+  Bearer:
+    description: Use "Bearer {access_token}" format.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

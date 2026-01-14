@@ -15,13 +15,15 @@ import (
 )
 
 type config struct {
-	App      ApplicationConfig
-	Postgres PostgresConfig
-	Minio    MinioConfig
-	Redis    RedisConfig
-	Elastic  ElasticConfig
-	Cache    CacheConfig
-	Tokens   TokensConfig
+	App      ApplicationConfig `mapstructure:"app"`
+	Postgres PostgresConfig    `mapstructure:"db"`
+	Minio    MinioConfig       `mapstructure:"minio"`
+	Redis    RedisConfig       `mapstructure:"redis"`
+	Elastic  ElasticConfig     `mapstructure:"elastic"`
+	Cache    CacheConfig       `mapstructure:"cache"`
+	Tokens   TokensConfig      `mapstructure:"tokens"`
+	GRPC     GrpcConfig        `mapstructure:"grpc"`
+	Kafka    KafkaConfig       `mapstructure:"kafka"`
 	JWT      JWTConfig
 }
 
@@ -37,51 +39,22 @@ func Get() *config {
 	}
 
 	once.Do(func() {
-		instance = &config{
-			App: ApplicationConfig{
-				Port: viper.GetString("port"),
-			},
-			Postgres: PostgresConfig{
-				Host:     viper.GetString("db.host"),
-				Port:     viper.GetString("db.port"),
-				User:     os.Getenv("POSTGRES_USER"),
-				Password: os.Getenv("POSTGRES_PASSWORD"),
-				DBName:   os.Getenv("POSTGRES_DB"),
-				SSLMode:  viper.GetString("db.sslmode"),
-			},
-			Minio: MinioConfig{
-				Port:       viper.GetString("minio.port"),
-				Endpoint:   viper.GetString("minio.endpoint"),
-				BucketName: viper.GetString("minio.bucketname"),
-				User:       os.Getenv("MINIO_USER"),
-				Password:   os.Getenv("MINIO_PASSWORD"),
-				UseSSL:     viper.GetBool("minio.sslmode"),
-				TTL:        viper.GetDuration("minio.ttl"),
-			},
-			Redis: RedisConfig{
-				Host:     viper.GetString("redis.host"),
-				Port:     viper.GetString("redis.port"),
-				Password: os.Getenv("REDIS_PASSWORD"),
-				DB:       viper.GetInt("redis.db"),
-			},
-			Elastic: ElasticConfig{
-				Host: viper.GetString("elastic.host"),
-				Port: viper.GetString("elastic.port"),
-			},
-			Cache: CacheConfig{
-				DefaultTtl:  viper.GetDuration("cache.defaultTtl"),
-				CountersTtl: viper.GetDuration("cache.countersTtl"),
-			},
-			Tokens: TokensConfig{
-				AccessTTL:   viper.GetDuration("tokens.accessTTL"),
-				RefreshTTL:  viper.GetDuration("tokens.refreshTTL"),
-				RecoveryTTL: viper.GetDuration("tokens.recoveryTTL"),
-			},
-			JWT: JWTConfig{
-				PrivateKey: privateKey,
-				PublicKey:  publicKey,
-			},
+		var cfg config
+		if err := viper.Unmarshal(&cfg); err != nil {
+			logrus.Fatalf("viper unmarshal failed: %v", err)
 		}
+
+		cfg.Postgres.User = os.Getenv("POSTGRES_USER")
+		cfg.Postgres.Password = os.Getenv("POSTGRES_PASSWORD")
+		cfg.Postgres.DBName = os.Getenv("POSTGRES_DB")
+		cfg.Minio.User = os.Getenv("MINIO_USER")
+		cfg.Minio.Password = os.Getenv("MINIO_PASSWORD")
+		cfg.Redis.Password = os.Getenv("REDIS_PASSWORD")
+
+		cfg.JWT.PrivateKey = privateKey
+		cfg.JWT.PublicKey = publicKey
+
+		instance = &cfg
 	})
 	return instance
 }
@@ -179,8 +152,29 @@ func (c *config) Validate() error {
 	if c.JWT.PublicKey == nil {
 		allErrs = append(allErrs, "jwt: public key path is required")
 	}
+
+	if c.GRPC.Host == "" {
+		allErrs = append(allErrs, "grpc: host is required")
+	}
+	if c.GRPC.SearchPort == "" {
+		allErrs = append(allErrs, "grpc: search port is required")
+	}
+	if c.GRPC.IntegrationPort == "" {
+		allErrs = append(allErrs, "grpc: integration port is required")
+	}
+
+	if len(c.Kafka.Brokers) == 0 {
+		allErrs = append(allErrs, "kafka: brokers is required")
+	}
+	if len(c.Kafka.Topics) == 0 {
+		allErrs = append(allErrs, "kafka: events names is required")
+	}
+	if c.Kafka.Consumer.GroupID == "" {
+		allErrs = append(allErrs, "kafka: consumer group id is required")
+	}
+
 	if len(allErrs) > 0 {
-		return errors.New("config validation errors:\n  • " + strings.Join(allErrs, "\n  • "))
+		return errors.New("config validation errors: " + strings.Join(allErrs, " "))
 	}
 	return nil
 }
@@ -188,11 +182,10 @@ func (c *config) Validate() error {
 func InitConfig() error {
 	viper.SetConfigFile(".env")
 	if err := viper.MergeInConfig(); err != nil {
-		logrus.Printf("warning: .env file not loaded: %v", err)
+		logrus.Warnf(".env file not loaded: %v", err)
 	}
 
 	viper.AutomaticEnv()
-
 	if err := godotenv.Load(); err != nil {
 		logrus.Warn("No .env file found, assuming env vars are set")
 	}

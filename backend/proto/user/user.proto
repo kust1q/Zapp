@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package user;
+
+option go_package = "github.com/kust1q/Zapp/backend/proto/user;userproto";
+
+// UserService exposes read-only user and profile data for integration with other services.
+service UserService {
+  // Getting user by id
+  rpc GetUserByID       (GetUserByIDRequest)       returns (User);
+  // Getting user by username
+  rpc GetUserByUsername (GetUserByUsernameRequest) returns (User);
+  // Getting user profile
+  rpc GetUserProfile    (GetUserProfileRequest)    returns (UserProfile);
+  // Get user followers list
+  rpc GetFollowers      (GetFollowersRequest)      returns (SmallUserList);
+  // Get user followings list
+  rpc GetFollowings     (GetFollowingsRequest)      returns (SmallUserList);
+}
+
+message GetUserByIDRequest {
+  int64 user_id = 1;
+}
+
+message GetUserByUsernameRequest {
+  string username = 1;
+}
+
+message GetUserProfileRequest {
+  string username = 1;
+  int32 limit  = 2;
+  int32 offset = 3; 
+}
+
+message GetFollowersRequest {
+  string username = 1;
+  int32 limit  = 2;
+  int32 offset = 3;
+}
+
+message GetFollowingsRequest {
+  string username = 1;
+  int32 limit  = 2;
+  int32 offset = 3; 
+}
+
+message User {
+  int64  id          = 1;
+  string username    = 2;
+  string bio         = 3;
+  string gen         = 4;
+  string email       = 5;
+  string created_at  = 6;
+  string avatar_url  = 7;
+  bool   is_superuser = 8;
+  bool   is_active    = 9;
+}
+
+message TweetCounters {
+  int64 reply_count   = 1;
+  int64 retweet_count = 2;
+  int64 like_count    = 3;
+}
+
+message TweetAuthor {
+  int64  id         = 1;
+  string username   = 2;
+  string avatar_url = 3;
+}
+
+message Tweet {
+  int64        id              = 1;
+  string       content         = 2;
+  string       created_at      = 3;
+  string       updated_at      = 4;
+  int64        parent_tweet_id = 5;
+  string       media_url       = 6;
+  TweetAuthor  author          = 7;
+  TweetCounters counters       = 8;
+}
+
+message UserProfile {
+  User           user   = 1;
+  repeated Tweet tweets = 2;
+}
+
+message SmallUser {
+  int64  id         = 1;
+  string username   = 2;
+  string avatar_url = 3;
+}
+
+message SmallUserList {
+  repeated SmallUser users = 1;
+}

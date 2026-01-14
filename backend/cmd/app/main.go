@@ -1,34 +1,55 @@
+// @title           Twitter-like API
+// @version         1.0
+// @description     Simple Twitter-like REST API.
+// @BasePath        /api/v1/
+
+// @securityDefinitions.apikey Bearer
+// @in header
+// @name Authorization
+// @description  Use "Bearer {access_token}" format.
 package main
 
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	_ "github.com/kust1q/Zapp/backend/docs"
 	"github.com/kust1q/Zapp/backend/internal/config"
-	httpHandler "github.com/kust1q/Zapp/backend/internal/controllers/http/handler"
+	tweetgrpc "github.com/kust1q/Zapp/backend/internal/core/controllers/grpc/servers/tweet"
+	usergrpc "github.com/kust1q/Zapp/backend/internal/core/controllers/grpc/servers/user"
+	httpHandler "github.com/kust1q/Zapp/backend/internal/core/controllers/http/handler"
+	s3 "github.com/kust1q/Zapp/backend/internal/core/providers/db/minio"
+	db "github.com/kust1q/Zapp/backend/internal/core/providers/db/postgres"
+	"github.com/kust1q/Zapp/backend/internal/core/providers/db/redis/cache"
+	"github.com/kust1q/Zapp/backend/internal/core/providers/db/redis/tokens"
+	searchClient "github.com/kust1q/Zapp/backend/internal/core/providers/search"
+	wsProvider "github.com/kust1q/Zapp/backend/internal/core/providers/websocket" // Infrastructure
+	"github.com/kust1q/Zapp/backend/internal/core/service/auth"
+	"github.com/kust1q/Zapp/backend/internal/core/service/feed"
+	"github.com/kust1q/Zapp/backend/internal/core/service/media"
+	"github.com/kust1q/Zapp/backend/internal/core/service/notification"
+	searchService "github.com/kust1q/Zapp/backend/internal/core/service/search"
+	"github.com/kust1q/Zapp/backend/internal/core/service/tweets"
+	"github.com/kust1q/Zapp/backend/internal/core/service/user" // Connection Logic
+	"github.com/kust1q/Zapp/backend/internal/core/service/websocket"
 	"github.com/kust1q/Zapp/backend/internal/domain/entity"
-	s3 "github.com/kust1q/Zapp/backend/internal/providers/db/minio"
-	db "github.com/kust1q/Zapp/backend/internal/providers/db/postgres"
-	"github.com/kust1q/Zapp/backend/internal/providers/db/redis/cache"
-	"github.com/kust1q/Zapp/backend/internal/providers/db/redis/tokens"
-	"github.com/kust1q/Zapp/backend/internal/providers/search/elastic"
-	"github.com/kust1q/Zapp/backend/internal/service/auth"
-	"github.com/kust1q/Zapp/backend/internal/service/feed"
-	"github.com/kust1q/Zapp/backend/internal/service/media"
-	"github.com/kust1q/Zapp/backend/internal/service/search"
-	"github.com/kust1q/Zapp/backend/internal/service/tweets"
-	"github.com/kust1q/Zapp/backend/internal/service/user"
-	el "github.com/kust1q/Zapp/backend/pkg/elastic"
+	tweetproto "github.com/kust1q/Zapp/backend/pkg/gen/proto/tweet"
+	userproto "github.com/kust1q/Zapp/backend/pkg/gen/proto/user"
+	kafkaProvider "github.com/kust1q/Zapp/backend/pkg/kafka"
 	mn "github.com/kust1q/Zapp/backend/pkg/minio"
 	pg "github.com/kust1q/Zapp/backend/pkg/postgres"
 	rs "github.com/kust1q/Zapp/backend/pkg/redis"
 	_ "github.com/lib/pq"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/reflection"
 )
 
 func main() {
@@ -49,12 +70,6 @@ func main() {
 	}
 	cache := cache.NewCache(redisClient, cfg.Cache.DefaultTtl, cfg.Cache.CountersTtl)
 
-	elasticClient, err := el.NewElasticClient([]string{fmt.Sprintf("http://%s:%s", cfg.Elastic.Host, cfg.Elastic.Port)})
-	if err != nil {
-		logrus.Fatalf("failed to connect to elasticsearch: %v", err)
-	}
-	elasticRepo := elastic.NewElasticRepository(elasticClient)
-
 	postgresConnect, err := pg.NewPostgresConnect(&cfg.Postgres)
 	if err != nil {
 		logrus.WithError(err).Fatal("failed to initialize pg connect")
@@ -66,7 +81,7 @@ func main() {
 		logrus.WithError(err).Fatal("failed to initialize minio client")
 	}
 
-	mediaTypeMap := map[entity.MediaType]s3.MediaPolicy{
+	mediaTypeMap := map[entity.MediaType]entity.MediaPolicy{
 		entity.MediaTypeImage: {
 			MaxSize:     16 * 1024 * 1024,
 			AllowedMime: []string{"image/jpeg", "image/png", "image/webp"},
@@ -89,20 +104,43 @@ func main() {
 			AllowedExt:  []string{".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a"},
 		},
 	}
-
 	minioDB := s3.NewMinioDB(minioClient, &cfg.Minio, mediaTypeMap)
+
+	kafkaProducer := kafkaProvider.NewEventProducer(&cfg.Kafka)
+	defer func() {
+		if err := kafkaProducer.Close(); err != nil {
+			logrus.Errorf("Error closing Kafka producer: %v", err)
+		}
+	}()
+
+	searchConn, err := grpc.NewClient(
+		fmt.Sprintf("%s:%s", cfg.GRPC.Host, cfg.GRPC.SearchPort),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		logrus.Fatalf("failed to create grpc client: %v", err)
+	}
+	defer searchConn.Close()
+
+	searchClient := searchClient.NewClientSearchService(searchConn)
+	defer searchConn.Close()
+
+	wsHub := wsProvider.NewHub()
+	go wsHub.Run()
 
 	mediaService := media.NewMediaService(pgDB, minioDB)
 	authService := auth.NewAuthService(
-		config.AuthServiceConfig{PrivateKey: cfg.JWT.PrivateKey, PublicKey: cfg.JWT.PublicKey, AccessTTL: cfg.Tokens.AccessTTL, RefreshTTL: cfg.Tokens.RefreshTTL},
+		&config.AuthServiceConfig{PrivateKey: cfg.JWT.PrivateKey, PublicKey: cfg.JWT.PublicKey, AccessTTL: cfg.Tokens.AccessTTL, RefreshTTL: cfg.Tokens.RefreshTTL},
 		pgDB,
 		mediaService,
 		tokens.NewTokenStorage(redisClient),
-		elasticRepo)
-	tweetService := tweets.NewTweetService(pgDB, mediaService, elasticRepo)
-	userService := user.NewUserService(pgDB, mediaService, elasticRepo)
+		kafkaProducer)
+	tweetService := tweets.NewTweetService(pgDB, mediaService, kafkaProducer)
+	userService := user.NewUserService(pgDB, mediaService, kafkaProducer)
 	feedService := feed.NewFeedService(pgDB, tweetService)
-	searchService := search.NewSearchService(pgDB, elasticRepo, mediaService)
+	searchService := searchService.NewSearchService(pgDB, mediaService, tweetService, searchClient)
+	wsService := websocket.NewWebSocketService(wsHub)
+	notifService := notification.NewNotificationService(wsHub, pgDB)
 
 	handler := httpHandler.NewHandler(
 		authService,
@@ -111,6 +149,8 @@ func main() {
 		searchService,
 		feedService,
 		mediaService,
+		wsService,
+		notifService,
 	)
 
 	srv := &http.Server{
@@ -125,6 +165,26 @@ func main() {
 		}
 	}()
 
+	lis, err := net.Listen("tcp4", fmt.Sprintf("0.0.0.0:%s", cfg.GRPC.IntegrationPort))
+	if err != nil {
+		logrus.Fatalf("failed to listen for grpc: %v", err)
+	}
+	grpcServer := grpc.NewServer()
+	tweetGrpcHandler := tweetgrpc.NewTweetServer(tweetService)
+	userGrpcHandler := usergrpc.NewUserServer(userService)
+
+	reflection.Register(grpcServer)
+
+	tweetproto.RegisterTweetServiceServer(grpcServer, tweetGrpcHandler)
+	userproto.RegisterUserServiceServer(grpcServer, userGrpcHandler)
+
+	go func() {
+		logrus.Infof("Starting Integration gRPC server on port %s", cfg.GRPC.IntegrationPort)
+		if err := grpcServer.Serve(lis); err != nil {
+			logrus.Fatalf("grpc serve failed: %v", err)
+		}
+	}()
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
@@ -136,6 +196,7 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		logrus.Fatal("Server forced to shutdown:", err)
 	}
+
 	logrus.Info("Closing database connection...")
 	if err := postgresConnect.Close(); err != nil {
 		logrus.Errorf("Error closing DB: %v", err)

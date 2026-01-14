@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: zapp
+data:
+  grafana.ini: |
+    [security]
+    admin_password = admin
+    allow_embedding = true

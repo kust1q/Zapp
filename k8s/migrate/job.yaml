@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: zapp
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-postgres
+        image: postgres:15
+        command: ['sh', '-c', 'until pg_isready -h postgres -p 5432; do echo waiting; sleep 2; done']
+      containers:
+      - name: migrate
+        image: migrate/migrate:latest
+        args:
+          - "-path=/migrations"
+          - "-database=postgres://postgres_user:postgres_password@postgres:5432/postgres_db?sslmode=disable"
+          - "up"
+        volumeMounts:
+          - name: migrations
+            mountPath: /migrations
+      volumes:
+        - name: migrations
+          configMap:
+            name: db-migrations
+      restartPolicy: Never
+  backoffLimit: 4

@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zapp-backend
+  namespace: zapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zapp-backend
+  template:
+    metadata:
+      labels:
+        app: zapp-backend
+    spec:
+      containers:
+      - name: backend
+        image: zapp-backend:1.0
+        ports:
+          - containerPort: 8080
+        env:
+          - name: POSTGRES_USER
+            valueFrom:
+              secretKeyRef:
+                name: db-secret
+                key: POSTGRES_USER
+          - name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: db-secret
+                key: POSTGRES_PASSWORD
+          - name: POSTGRES_DB
+            valueFrom:
+              secretKeyRef:
+                name: db-secret
+                key: POSTGRES_DB
+          - name: DB_URL
+            value: "postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)?sslmode=disable"
+          - name: MINIO_USER
+            value: "minio_user"
+          - name: MINIO_PASSWORD
+            value: "minio_password"
+          - name: REDIS_PASSWORD
+            value: "redis_password"
+          - name: HASH_SECRET
+            value: "ecf5d5137aa0ce362d8f496c154ff53d31bb1b381a6a740684a987bc5e80647c"
+          - name: PRIVATE_KEY_PATH
+            value: "/app/certs/private.pem"
+          - name: PUBLIC_KEY_PATH
+            value: "/app/certs/public.pem"
+        volumeMounts:
+          - name: certs-volume
+            mountPath: /app/certs
+            readOnly: true
+      volumes:
+        - name: certs-volume
+          secret:
+            secretName: app-certs

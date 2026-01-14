@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: zapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana-enterprise:latest
+        env:
+          - name: GF_SECURITY_ADMIN_PASSWORD
+            value: "admin"
+          - name: GF_USERS_ALLOW_SIGN_UP
+            value: "false"
+        volumeMounts:
+          - name: config-volume
+            mountPath: /etc/grafana/grafana.ini
+            subPath: grafana.ini
+        ports:
+          - containerPort: 3000
+      volumes:
+        - name: config-volume
+          configMap:
+            name: grafana-config

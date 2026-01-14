@@ -11,6 +11,7 @@ var (
 	ErrInvalidRefreshToken = errors.New("invalid refresh token")
 	ErrUserNotFound        = errors.New("user not found")
 	ErrTweetNotFound       = errors.New("tweet not found")
+	ErrTweetMediaNotFound  = errors.New("tweet media not found")
 	ErrUnauthorizedUpdate  = errors.New("user is not authorized to update this tweet")
 
 	ErrFileTooLarge     = errors.New("file too large")
