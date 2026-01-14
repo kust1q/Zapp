@@ -17,3 +17,28 @@ A lightweight REST API inspired by X.com, built with GO.
 [![Docker](https://img.shields.io/badge/-Docker-464646?style=flat-square&logo=docker)](https://www.docker.com/)
 [![Kubernetes](https://img.shields.io/badge/-Kubernetes-464646?style=flat-square&logo=kubernetes)](https://kubernetes.io/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+## Tech Stack
+
+### Languages & Frameworks
+- **Programming Language**: Go 1.24.4
+- **Web Framework**: [Gin](https://gin-gonic.com/) — High-performance HTTP framework for building REST APIs  
+- **gRPC**: Implemented services using the gRPC protocol for inter-service communication  
+- **Avatar Generation**: [govatar](https://github.com/alexeyco/govatar) — Library for generating random avatars
+
+### Data Storage
+- **Relational Database**: [PostgreSQL](https://www.postgresql.org/) — Reliable and scalable RDBMS (recommended version: 16.11+)  
+- **Caching / Sessions**: [Redis](https://redis.io/) — Fast key-value store for caching and session management  
+- **Search & Analytics**: [Elasticsearch](https://www.elastic.co/elasticsearch/) — Full-text search and data aggregation engine  
+- **Object Storage**: [MinIO S3](https://min.io/) — S3-compatible storage for files and media
+
+### Migrations & Schema Management
+- **Database Migrations**: [golang-migrate](https://github.com/golang-migrate/migrate) — Tool for managing PostgreSQL schema migrations
+
+### Monitoring & Observability
+- **Metrics**: [Prometheus](https://prometheus.io/) — Collection and visualization of application metrics  
+- **Dashboards**: [Grafana](https://grafana.com/) — Visualization of metrics, logs, and traces
+
+### Infrastructure & Deployment
+- **Containerization**: [Docker](https://www.docker.com/) — Building and running containers  
+- **Orchestration**: [Kubernetes](https://kubernetes.io/) — Managing microservices in production
