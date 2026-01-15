@@ -27,7 +27,7 @@ A lightweight REST API inspired by X.com, built with GO.
 - **Avatar Generation**: [govatar](https://github.com/alexeyco/govatar) — Library for generating random avatars
 
 ### Data Storage
-- **Relational Database**: [PostgreSQL](https://www.postgresql.org/) — Reliable and scalable RDBMS (recommended version: 16.11+)  
+- **Relational Database**: [PostgreSQL](https://www.postgresql.org/) — Reliable and scalable RDBMS
 - **Caching / Sessions**: [Redis](https://redis.io/) — Fast key-value store for caching and session management  
 - **Search & Analytics**: [Elasticsearch](https://www.elastic.co/elasticsearch/) — Full-text search and data aggregation engine  
 - **Object Storage**: [MinIO S3](https://min.io/) — S3-compatible storage for files and media
