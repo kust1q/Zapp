@@ -39,6 +39,9 @@ A lightweight REST API inspired by X.com, built with GO.
 - **Metrics**: [Prometheus](https://prometheus.io/) — Collection and visualization of application metrics  
 - **Dashboards**: [Grafana](https://grafana.com/) — Visualization of metrics, logs, and traces
 
+### Event Streaming & Messaging
+- **Event Broker**: [Apache Kafka](https://kafka.apache.org/) — Distributed event streaming platform for asynchronous communication between services
+
 ### Infrastructure & Deployment
 - **Containerization**: [Docker](https://www.docker.com/) — Building and running containers  
 - **Orchestration**: [Kubernetes](https://kubernetes.io/) — Managing microservices in production
